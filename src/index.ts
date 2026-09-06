@@ -13,6 +13,7 @@ import {
   GatewayIntentBits,
   type Guild,
   type Interaction,
+  type Message,
   MessageFlags,
   PermissionFlagsBits,
   REST,
@@ -25,6 +26,7 @@ import * as db from "./db";
 import { scanNewImages } from "./scanner";
 import {
   CLAIM_WINDOW_SECONDS,
+  COLLECTION_IDLE_SECONDS,
   EXCHANGE_WINDOW_SECONDS,
   IMAGE_BASE_URL,
   IMAGES_DIR,
@@ -108,6 +110,62 @@ function exchangeRow(offerer: string, target: string, mine: number, theirs: numb
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`xchg:a:${tail}`).setLabel("قبول 🤝").setStyle(ButtonStyle.Success).setDisabled(disabled),
     new ButtonBuilder().setCustomId(`xchg:d:${tail}`).setLabel("رفض").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+  );
+}
+
+// ---------- /collection browsing ----------
+
+const byRarityDesc = (a: db.Card, b: db.Card) =>
+  RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name, "ar");
+
+function pageRow(userId: string, page: number, total: number, expiresAt: number, disabled = false) {
+  const id = (p: number) => `col:${userId}:${p}:${expiresAt}`;
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(id(page - 1)).setLabel("◀ السابق").setStyle(ButtonStyle.Secondary).setDisabled(disabled || page === 0),
+    new ButtonBuilder().setCustomId("col:label").setLabel(page === 0 ? `الملخص · ${total} كرت` : `${page} / ${total}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+    new ButtonBuilder().setCustomId(id(page + 1)).setLabel("التالي ▶").setStyle(ButtonStyle.Secondary).setDisabled(disabled || page === total),
+  );
+}
+
+/** Page 0 is the summary, pages 1..N are the cards. Returns null when the collection is empty. */
+export function collectionPage(gid: string, user: Pick<User, "id" | "displayName">, page: number, expiresAt: number) {
+  const cards = db.collection(gid, user.id).sort(byRarityDesc);
+  if (!cards.length) return null;
+  page = Math.min(Math.max(page, 0), cards.length);
+  let embed: EmbedBuilder;
+  if (page === 0) {
+    const points = cards.reduce((s, c) => s + RARITIES[c.rarity].points, 0);
+    embed = new EmbedBuilder().setTitle(`مجموعة ${user.displayName}`).setColor(0xe91e63).setFooter({ text: `${cards.length} كرت · ${points} نقطة` });
+    for (const tier of [...RARITY_ORDER].reverse()) {
+      const names = cards.filter((c) => c.rarity === tier).map((c) => c.name);
+      if (!names.length) continue;
+      const more = names.length > 15 ? `\n… و${names.length - 15} غيرها` : "";
+      embed.addFields({ name: `${RARITIES[tier].emoji} ${tier} (${names.length})`, value: names.slice(0, 15).join("\n") + more });
+    }
+    arEmbed(embed);
+  } else {
+    embed = cardEmbed(cards[page - 1]!, user.id);
+  }
+  const card = page ? cards[page - 1]! : null;
+  return {
+    payload: { embeds: [embed], components: [pageRow(user.id, page, cards.length, expiresAt)], files: card ? cardFiles(card) : [], attachments: [] },
+    idle: { components: [pageRow(user.id, page, cards.length, expiresAt, true)] },
+  };
+}
+
+// ponytail: idle timers live in memory. After a restart, stale buttons still expire through the
+// timestamp in their customId; they just aren't greyed out.
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Grey out the browsing buttons once nobody has clicked for COLLECTION_IDLE_SECONDS. Renewed on every click. */
+function armIdle(msg: Message, idle: { components: ActionRowBuilder<ButtonBuilder>[] }) {
+  clearTimeout(idleTimers.get(msg.id));
+  idleTimers.set(
+    msg.id,
+    setTimeout(() => {
+      idleTimers.delete(msg.id);
+      msg.edit(idle).catch(() => {});
+    }, COLLECTION_IDLE_SECONDS * 1000),
   );
 }
 
@@ -229,17 +287,10 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     case "collection": {
       await i.deferReply();
       const user = i.options.getUser("member") ?? i.user;
-      const cards = db.collection(gid, user.id);
-      if (!cards.length) return void i.editReply(ar(`${user.displayName} ما عنده كروت بعد`));
-      const points = cards.reduce((s, c) => s + RARITIES[c.rarity].points, 0);
-      const e = new EmbedBuilder().setTitle(`مجموعة ${user.displayName}`).setColor(0xe91e63).setFooter({ text: `${cards.length} كرت · ${points} نقطة` });
-      for (const tier of [...RARITY_ORDER].reverse()) {
-        const names = cards.filter((c) => c.rarity === tier).map((c) => c.name);
-        if (!names.length) continue;
-        const more = names.length > 15 ? `\n… و${names.length - 15} غيرها` : "";
-        e.addFields({ name: `${RARITIES[tier].emoji} ${tier} (${names.length})`, value: names.slice(0, 15).join("\n") + more });
-      }
-      return void i.editReply({ embeds: [arEmbed(e)] });
+      const view = collectionPage(gid, user, 0, Date.now() + COLLECTION_IDLE_SECONDS * 1000);
+      if (!view) return void i.editReply(ar(`${user.displayName} ما عنده كروت بعد`));
+      armIdle(await i.editReply(view.payload), view.idle);
+      return;
     }
 
     case "card": {
@@ -349,6 +400,16 @@ async function handleButton(i: ButtonInteraction) {
     return void i.followUp(ar(`💍 ${i.user} حصل على **${card.name}**!`));
   }
 
+  if (kind === "col") {
+    const [userId, pageStr, expStr] = rest as [string, string, string];
+    if (Date.now() > Number(expStr)) return void i.reply({ content: ar("⌛ انتهت الجلسة. اكتب /collection من جديد"), ...Ephemeral });
+    const user = await client.users.fetch(userId);
+    const view = collectionPage(gid, user, Number(pageStr), Date.now() + COLLECTION_IDLE_SECONDS * 1000);
+    if (!view) return void i.update({ content: ar(`${user.displayName} ما عنده كروت بعد`), embeds: [], components: [] });
+    await i.update(view.payload);
+    return void armIdle(i.message, view.idle);
+  }
+
   if (kind === "xchg") {
     const [action, offerer, target, mineId, theirsId, expiresAt] = rest as [string, string, string, string, string, string];
     if (uid !== target) return void i.reply({ content: ar("هذا العرض ليس لك"), ...Ephemeral });
@@ -366,4 +427,4 @@ async function handleButton(i: ButtonInteraction) {
   }
 }
 
-client.login(token);
+if (import.meta.main) client.login(token); // importable without connecting (tests)

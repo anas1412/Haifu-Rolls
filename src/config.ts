@@ -19,6 +19,7 @@ export const ROLLS_PER_DAY = 3;          // rolls each player gets per day
 // Both reset at midnight, local time of the machine running the bot.
 export const CLAIM_WINDOW_SECONDS = 30;  // how long the claim button stays alive after a roll
 export const EXCHANGE_WINDOW_SECONDS = 300;
+export const COLLECTION_IDLE_SECONDS = 120; // /collection browsing buttons grey out after this long without a click
 export const ROLL_ONLY_UNCLAIMED = true; // true: /roll only shows cards nobody in the server owns yet
 
 export const IMAGES_DIR = "images";

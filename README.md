@@ -9,7 +9,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | Command | What it does |
 |---|---|
 | `/roll` | Roll a random card. Unclaimed cards show a claim button for 30 seconds |
-| `/collection [member]` | Your cards (or someone else's), grouped by rarity |
+| `/collection [member]` | Summary page plus one card per page with its photo. Prev / next buttons, greyed out after 2 idle minutes |
 | `/card <name>` | Look up a card and see who owns it |
 | `/top` | Leaderboard by points |
 | `/divorce <name>` | Release a card you own |
