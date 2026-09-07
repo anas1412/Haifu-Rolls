@@ -75,6 +75,11 @@ export function addCard(file: string, name: string, rarity: Rarity, description:
   return Number(r.lastInsertRowid);
 }
 
+/** Change a known card's rarity (seed.json edits). True if it changed. */
+export function setRarity(file: string, rarity: Rarity): boolean {
+  return db.query("UPDATE cards SET rarity = ? WHERE file = ? AND rarity <> ?").run(rarity, file, rarity).changes === 1;
+}
+
 export function knownFiles(): Set<string> {
   return new Set(db.query<{ file: string }, []>("SELECT file FROM cards").all().map((r) => r.file));
 }

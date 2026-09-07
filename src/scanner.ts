@@ -36,6 +36,7 @@ const TITLES: Record<Rarity, string[]> = {
     "الملكة", "هيفاء وهبي", "أنا هيفاء", "الملكة المتوّجة", "أسطورة لبنان",
     "ملكة الملكات", "الطلة الخالدة", "لحظة التاريخ", "تاج الشرق", "الملكة بلا منازع",
   ],
+  "المنتخب": ["الكابتن", "لاعبة الأساس", "المهاجمة", "صانعة الألعاب", "الهدف الذهبي", "الركلة الحرة", "المدرّجات"],
 };
 
 const DESCRIPTIONS: Record<Rarity, string[]> = {
@@ -44,6 +45,7 @@ const DESCRIPTIONS: Record<Rarity, string[]> = {
   "نادرة": ["ما بتشوفها كل يوم.", "لقطة نادرة لملكة الطلات.", "احتفظ بها، صعب تلاقي مثلها."],
   "أسطورية": ["لحظة دخلت التاريخ.", "طلة حكى عنها الكل.", "الأسطورة بشخصها."],
   "الملكة": ["👑 الملكة فقط. لا تعليق.", "أندر ما يمكن أن تملكه.", "هيفاء في أعلى مراتب المجد."],
+  "المنتخب": ["⚽ لباس رياضي والملكة في الملعب.", "أندر من هدف في الدقيقة 90.", "الكرت الذي يطلبه الجميع."],
 };
 
 const pick = <T>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)]!;
@@ -77,7 +79,13 @@ export async function scanNewImages(): Promise<db.Card[]> {
   }
   const added: db.Card[] = [];
   for (const file of readdirSync(IMAGES_DIR).sort()) {
-    if (!IMAGE_EXTS.has(extname(file).toLowerCase()) || known.has(file)) continue;
+    if (!IMAGE_EXTS.has(extname(file).toLowerCase())) continue;
+    if (known.has(file)) {
+      // Already registered: only pick up rarity changes made in seed.json.
+      const s = seed.get(file);
+      if (s && db.setRarity(file, s.rarity)) console.log(`card ${file} -> rarity ${s.rarity}`);
+      continue;
+    }
     let rarity: Rarity, name: string, desc: string;
     const s = seed.get(file);
     if (s) {
