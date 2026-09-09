@@ -238,9 +238,18 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 client.on(Events.GuildCreate, async (guild) => {
-  await syncGuild(guild);
-  console.log(`joined ${guild.name}, commands synced`);
+  try {
+    await syncGuild(guild);
+    console.log(`joined ${guild.name} (${guild.id}), commands synced`);
+  } catch (err) {
+    // Usually the invite link lacked the applications.commands scope: Discord answers 403 Missing Access.
+    console.error(`joined ${guild.name} (${guild.id}) but could not register commands:`, err);
+  }
 });
+
+client.on(Events.GuildDelete, (guild) => console.log(`removed from ${guild.name ?? guild.id}`));
+
+process.on("unhandledRejection", (err) => console.error("unhandled rejection", err));
 
 // ---------- interaction routing ----------
 
