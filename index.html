@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Haifu Rolls — هيفاء وهبي على ديسكورد</title>
 <meta name="description" content="بوت ديسكورد على طريقة Mudae: ارمِ كروت هيفاء وهبي، اطلبها، اجمعها، وتبادلها.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Haifu Rolls — هيفاء وهبي على ديسكورد">
+<meta property="og:description" content="بوت ديسكورد على طريقة Mudae: ارمِ كروت هيفاء وهبي، اطلبها، اجمعها، وتبادلها.">
+<meta property="og:image" content="https://raw.githubusercontent.com/anas1412/Haifu-Rolls/main/haifu-cover.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/anas1412/Haifu-Rolls/main/haifu-cover.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -40,6 +46,7 @@
   .wrap{max-width:1040px;margin:0 auto;padding-left:32px;padding-right:32px}
 
   /* ---------- hero ---------- */
+  .cover{display:block;width:100%;border-radius:var(--radius);margin-bottom:56px;box-shadow:0 30px 60px rgba(0,0,0,.5);border:1px solid var(--gold-line)}
   header{padding:88px 0 72px}
   .hero{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
   .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;color:var(--gold-soft);text-transform:uppercase;direction:ltr;text-align:right;margin-bottom:12px}
@@ -146,6 +153,7 @@
 <body>
 
 <header class="wrap">
+  <img class="cover" src="haifu-cover.jpg" alt="Haifu Rolls">
   <div class="hero">
     <div>
       <div class="eyebrow">Haifu Rolls · Discord</div>

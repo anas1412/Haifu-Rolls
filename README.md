@@ -1,5 +1,7 @@
 # Haifu Rolls
 
+![Haifu Rolls](haifu-cover.jpg)
+
 Mudae-style card game for Discord. Every card is a Haifa Wehbe photo.
 **500 cards are included** in `images/` with hand-picked rarities and Arabic names (`seed.json`).
 Any new photo you drop in later gets a random **rarity** (weighted dice) and a name from a curated list.
