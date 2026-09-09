@@ -2,6 +2,9 @@
 
 ![Haifu Rolls](haifu-cover.jpg)
 
+**[➕ Add Haifu Rolls to your server](https://discord.com/oauth2/authorize?client_id=1545127309353287761&scope=bot%20applications.commands&permissions=2147534848)**
+The bot is hosted and online 24/7. No setup needed. It asks only for Send Messages, Embed Links, Attach Files, and slash commands. No admin.
+
 Mudae-style card game for Discord. Every card is a Haifa Wehbe photo.
 **500 cards are included** in `images/` with hand-picked rarities and Arabic names (`seed.json`).
 Any new photo you drop in later gets a random **rarity** (weighted dice) and a name from a curated list.
@@ -35,7 +38,7 @@ Rolls only show cards nobody in the server owns yet (`ROLL_ONLY_UNCLAIMED` in `s
 
 Limits: **3 rolls per day**, **1 claim per day**. Both reset at **midnight**, local time of the machine running the bot. Numbers live in `src/config.ts`.
 
-## Run locally
+## Run your own copy (optional)
 
 1. Create the bot at https://discord.com/developers/applications → New Application → Bot → **Reset Token**, copy it.
 2. Same page → OAuth2 → URL Generator: scope `bot` + `applications.commands`,
