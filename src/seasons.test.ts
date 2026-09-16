@@ -1,0 +1,84 @@
+// Season lifecycle: medals, archiving, all-time totals, tie-breaks.
+//   bun test
+import { expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "haifu-test-")), "t.db");
+const db = await import("./db");
+db.init();
+
+const G = "1534906366068658196";
+const [A, B, C] = ["111111111111111111", "222222222222222222", "333333333333333333"];
+
+const card: Record<string, number> = {};
+for (const [name, rarity] of [["ع1", "عادية"], ["ع2", "عادية"], ["م1", "مميزة"], ["م2", "مميزة"], ["ن1", "نادرة"], ["ك1", "الملكة"]] as const) {
+  card[name] = db.addCard(`${name}.jpg`, name, rarity, "d");
+}
+const totalPoints = (season: number, user: string) => db.seasonTop(G, season).find((s) => s.userId === user)?.points ?? 0;
+
+test("a fresh server starts on season 1", () => {
+  expect(db.currentSeason(G)).toBe(1);
+});
+
+test("season 1 closes when the last card is taken and pays 5/4/3", () => {
+  db.claimFree(G, card["ك1"]!, A); // 50
+  db.claimFree(G, card["ن1"]!, B); // 8
+  db.claimFree(G, card["م1"]!, B); // +3 = 11
+  db.claimFree(G, card["م2"]!, C); // 3
+  db.claimFree(G, card["ع1"]!, C); // +1
+  db.claimFree(G, card["ع2"]!, C); // +1 = 5
+
+  expect(Object.values(db.poolCounts(G)).every((n) => !n)).toBe(true);
+  expect([totalPoints(1, A), totalPoints(1, B), totalPoints(1, C)]).toEqual([50, 11, 5]);
+  expect(db.closeSeason(G)).toEqual([
+    { userId: A, place: 1, points: 5 },
+    { userId: B, place: 2, points: 4 },
+    { userId: C, place: 3, points: 3 },
+  ]);
+  expect(db.currentSeason(G)).toBe(2);
+});
+
+test("the new season frees every card but keeps the old one readable", () => {
+  expect(Object.values(db.poolCounts(G)).reduce((a, b) => a + (b ?? 0), 0)).toBe(6);
+  expect(db.collection(G, A)).toHaveLength(0);
+  expect(db.collection(G, A, 1)).toHaveLength(1); // archived, not deleted
+  expect(totalPoints(1, A)).toBe(50);
+});
+
+test("all-time medals accumulate across seasons and never reset", () => {
+  db.claimFree(G, card["ك1"]!, C); // 50
+  db.claimFree(G, card["ن1"]!, A);
+  db.claimFree(G, card["م1"]!, A); // 11
+  db.claimFree(G, card["م2"]!, B);
+  db.claimFree(G, card["ع1"]!, B);
+  db.claimFree(G, card["ع2"]!, B); // 5
+  expect(db.closeSeason(G)).toEqual([
+    { userId: C, place: 1, points: 5 },
+    { userId: A, place: 2, points: 4 },
+    { userId: B, place: 3, points: 3 },
+  ]);
+
+  const all = db.allTimeLeaderboard(G);
+  expect(Object.fromEntries(all.map((r) => [r.userId, r.points]))).toEqual({ [A]: 9, [C]: 8, [B]: 7 });
+  expect(all[0]).toMatchObject({ userId: A, seasons: 2, golds: 1 });
+});
+
+test("a points tie goes to whoever holds more cards", () => {
+  const G2 = "9876543210987654321";
+  const one = db.addCard("t0.jpg", "ت0", "مميزة", "d"); // 3 points in one card
+  const many = ["ت1", "ت2", "ت3"].map((n) => db.addCard(`${n}.jpg`, n, "عادية", "d")); // 3 points in three
+  db.claimFree(G2, one, A);
+  for (const c of many) db.claimFree(G2, c, B);
+
+  const board = db.seasonTop(G2, 1);
+  expect(board.map((s) => s.userId)).toEqual([B, A]);
+  expect(board[0]!.points).toBe(board[1]!.points);
+});
+
+test("a server where nobody played never closes a season", () => {
+  const quiet = "555555555555555555";
+  expect(db.closeSeason(quiet)).toEqual([]);
+  expect(db.currentSeason(quiet)).toBe(1);
+});

@@ -16,7 +16,8 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/roll` | Roll a random card. Unclaimed cards show a claim button for 30 seconds |
 | `/collection [member]` | Summary page plus one card per page with its photo. Prev / next buttons, greyed out after 2 idle minutes |
 | `/card <name>` | Look up a card and see who owns it |
-| `/top` | Leaderboard by points |
+| `/top [season]` | This season's standings. Pass a number to see a finished season |
+| `/leaderboard` | All-time table of season medals. Never resets |
 | `/divorce <name>` | Release a card you own |
 | `/gift <member> <name>` | Give a card away |
 | `/exchange <member> <my_card> <their_card>` | Propose a trade. The other member gets Accept / Decline buttons (5 min) |
@@ -70,6 +71,18 @@ bun start
 On first start the bot registers the 500 seeded cards. Add more photos to `images/` later and run `/rescan`.
 
 Slash commands can take up to an hour to appear the first time. Kick the bot and re-invite it if they don't show.
+
+## Seasons
+
+A season runs until the **last unclaimed card in that server is taken**. Then:
+
+- The top five get permanent medal points: **5, 4, 3, 2, 1**.
+- The bot announces the winners and the next season opens, with every card rollable again.
+- Old claims are **archived, not deleted**, so past standings and collections stay readable.
+
+Seasons are per server, so one server can be on season 3 while another is still on season 1.
+`/top` shows the live season, `/top 1` a finished one, and `/leaderboard` the all-time medal table.
+There is no way to end a season by hand; it only ends when the cards run out.
 
 ## Card images: attachments or URLs
 

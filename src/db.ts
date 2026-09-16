@@ -47,10 +47,19 @@ export function init(): void {
     );
     CREATE TABLE IF NOT EXISTS claims (
       guild_id INTEGER NOT NULL,
+      season INTEGER NOT NULL,
       card_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
       claimed_at REAL NOT NULL,
-      PRIMARY KEY (guild_id, card_id)
+      PRIMARY KEY (guild_id, season, card_id)
+    );
+    CREATE TABLE IF NOT EXISTS season_medals (
+      guild_id INTEGER NOT NULL,
+      season INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      place INTEGER NOT NULL,
+      points INTEGER NOT NULL,
+      PRIMARY KEY (guild_id, season, user_id)
     );
     CREATE TABLE IF NOT EXISTS rolls (
       guild_id INTEGER NOT NULL,
@@ -68,9 +77,108 @@ export function init(): void {
       channel_id INTEGER NOT NULL
     );
   `);
+  migrate();
+}
+
+/** Old databases have a claims table with no season. Rebuild it once, keeping every row as season 1. */
+function migrate(): void {
+  const cols = db.query<{ name: string }, []>("PRAGMA table_info(claims)").all().map((c) => c.name);
+  if (cols.includes("season")) return;
+  db.exec(`
+    BEGIN;
+    CREATE TABLE claims_new (
+      guild_id INTEGER NOT NULL,
+      season INTEGER NOT NULL,
+      card_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      claimed_at REAL NOT NULL,
+      PRIMARY KEY (guild_id, season, card_id)
+    );
+    INSERT INTO claims_new (guild_id, season, card_id, user_id, claimed_at)
+      SELECT guild_id, 1, card_id, user_id, claimed_at FROM claims;
+    DROP TABLE claims;
+    ALTER TABLE claims_new RENAME TO claims;
+    COMMIT;
+  `);
+  console.log("migrated claims: every existing claim is now season 1");
 }
 
 const now = () => Date.now() / 1000;
+
+// ---------- seasons ----------
+
+/**
+ * A season is only written down once it ends, so the live one is always "last closed + 1".
+ * Seasons are per server: one guild can be on season 3 while another is still on 1.
+ */
+export function currentSeason(guildId: string): number {
+  return db
+    .query<{ n: number }, [string]>("SELECT COALESCE(MAX(season), 0) + 1 AS n FROM season_medals WHERE guild_id = ?")
+    .get(guildId)!.n;
+}
+
+/** Highest season that has actually been played (closed seasons plus the live one). */
+export function latestSeason(guildId: string): number {
+  return currentSeason(guildId);
+}
+
+export interface Standing { userId: string; points: number; count: number; firstAt: number }
+
+/** Card-point standings for one season. Ties: more points, then more cards, then who claimed first. */
+export function seasonTop(guildId: string, season: number, limit = 10): Standing[] {
+  const rows = db
+    .query<{ user_id: string; rarity: Rarity; n: number; first_at: number }, [string, number]>(
+      `SELECT CAST(k.user_id AS TEXT) AS user_id, c.rarity, COUNT(*) AS n, MIN(k.claimed_at) AS first_at
+       FROM claims k JOIN cards c ON c.id = k.card_id
+       WHERE k.guild_id = ? AND k.season = ? GROUP BY k.user_id, c.rarity`,
+    )
+    .all(guildId, season);
+  const totals = new Map<string, Standing>();
+  for (const r of rows) {
+    const t = totals.get(r.user_id) ?? { userId: r.user_id, points: 0, count: 0, firstAt: Infinity };
+    t.points += RARITIES[r.rarity].points * r.n;
+    t.count += r.n;
+    t.firstAt = Math.min(t.firstAt, r.first_at);
+    totals.set(r.user_id, t);
+  }
+  return [...totals.values()]
+    .sort((x, y) => y.points - x.points || y.count - x.count || x.firstAt - y.firstAt)
+    .slice(0, limit);
+}
+
+/** Medal points awarded to the top five when a season ends. */
+export const MEDAL_POINTS = [5, 4, 3, 2, 1];
+
+/**
+ * Close the live season: award medals to the top five and archive them.
+ * Claims are kept, so past collections stay readable; the next season simply ignores them.
+ */
+export function closeSeason(guildId: string): { userId: string; place: number; points: number }[] {
+  const season = currentSeason(guildId);
+  const medals = seasonTop(guildId, season, MEDAL_POINTS.length).map((s, i) => ({
+    userId: s.userId,
+    place: i + 1,
+    points: MEDAL_POINTS[i]!,
+  }));
+  if (!medals.length) return []; // nobody played; leave the season open
+  const insert = db.query("INSERT OR REPLACE INTO season_medals (guild_id, season, user_id, place, points) VALUES (?, ?, ?, ?, ?)");
+  db.transaction(() => {
+    for (const m of medals) insert.run(guildId, season, m.userId, m.place, m.points);
+  })();
+  return medals;
+}
+
+/** All-time table: medal points summed over every finished season. Never resets. */
+export function allTimeLeaderboard(guildId: string, limit = 10): { userId: string; points: number; seasons: number; golds: number }[] {
+  return db
+    .query<{ userId: string; points: number; seasons: number; golds: number }, [string, number]>(
+      `SELECT CAST(user_id AS TEXT) AS userId, SUM(points) AS points, COUNT(*) AS seasons,
+              SUM(CASE WHEN place = 1 THEN 1 ELSE 0 END) AS golds
+       FROM season_medals WHERE guild_id = ?
+       GROUP BY user_id ORDER BY points DESC, golds DESC LIMIT ?`,
+    )
+    .all(guildId, limit);
+}
 
 // ---------- cards ----------
 
@@ -96,11 +204,11 @@ export function allNames(): string[] {
 export function cardsInRarity(rarity: Rarity, unclaimedIn?: string): Card[] {
   if (unclaimedIn === undefined) return db.query<Card, [string]>("SELECT * FROM cards WHERE rarity = ?").all(rarity);
   return db
-    .query<Card, [string, string]>(
-      `SELECT c.* FROM cards c LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ?
+    .query<Card, [string, number, string]>(
+      `SELECT c.* FROM cards c LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ? AND k.season = ?
        WHERE c.rarity = ? AND k.card_id IS NULL`,
     )
-    .all(unclaimedIn, rarity);
+    .all(unclaimedIn, currentSeason(unclaimedIn), rarity);
 }
 
 export function getCard(id: number): Card | null {
@@ -121,12 +229,12 @@ export function poolCounts(unclaimedIn?: string): Partial<Record<Rarity, number>
     unclaimedIn === undefined
       ? db.query<{ rarity: Rarity; n: number }, []>("SELECT rarity, COUNT(*) AS n FROM cards GROUP BY rarity").all()
       : db
-          .query<{ rarity: Rarity; n: number }, [string]>(
+          .query<{ rarity: Rarity; n: number }, [string, number]>(
             `SELECT c.rarity, COUNT(*) AS n FROM cards c
-             LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ?
+             LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ? AND k.season = ?
              WHERE k.card_id IS NULL GROUP BY c.rarity`,
           )
-          .all(unclaimedIn);
+          .all(unclaimedIn, currentSeason(unclaimedIn));
   return Object.fromEntries(rows.map((r) => [r.rarity, r.n]));
 }
 
@@ -134,15 +242,18 @@ export function poolCounts(unclaimedIn?: string): Partial<Record<Rarity, number>
 
 export function ownerOf(guildId: string, cardId: number): string | null {
   const row = db
-    .query<{ user_id: string }, [string, number]>("SELECT CAST(user_id AS TEXT) AS user_id FROM claims WHERE guild_id = ? AND card_id = ?")
-    .get(guildId, cardId);
+    .query<{ user_id: string }, [string, number, number]>(
+      "SELECT CAST(user_id AS TEXT) AS user_id FROM claims WHERE guild_id = ? AND season = ? AND card_id = ?",
+    )
+    .get(guildId, currentSeason(guildId), cardId);
   return row?.user_id ?? null;
 }
 
 /** True if the claim succeeded, false if someone got there first. */
 export function claim(guildId: string, cardId: number, userId: string): boolean {
   try {
-    db.query("INSERT INTO claims (guild_id, card_id, user_id, claimed_at) VALUES (?, ?, ?, ?)").run(guildId, cardId, userId, now());
+    db.query("INSERT INTO claims (guild_id, season, card_id, user_id, claimed_at) VALUES (?, ?, ?, ?, ?)")
+      .run(guildId, currentSeason(guildId), cardId, userId, now());
   } catch {
     return false;
   }
@@ -151,51 +262,39 @@ export function claim(guildId: string, cardId: number, userId: string): boolean 
 }
 
 export function release(guildId: string, cardId: number, userId: string): boolean {
-  return db.query("DELETE FROM claims WHERE guild_id = ? AND card_id = ? AND user_id = ?").run(guildId, cardId, userId).changes === 1;
+  return (
+    db.query("DELETE FROM claims WHERE guild_id = ? AND season = ? AND card_id = ? AND user_id = ?")
+      .run(guildId, currentSeason(guildId), cardId, userId).changes === 1
+  );
 }
 
 export function transfer(guildId: string, cardId: number, fromUser: string, toUser: string): boolean {
   return (
-    db.query("UPDATE claims SET user_id = ? WHERE guild_id = ? AND card_id = ? AND user_id = ?").run(toUser, guildId, cardId, fromUser)
-      .changes === 1
+    db.query("UPDATE claims SET user_id = ? WHERE guild_id = ? AND season = ? AND card_id = ? AND user_id = ?")
+      .run(toUser, guildId, currentSeason(guildId), cardId, fromUser).changes === 1
   );
 }
 
 /** Atomically trade cardA (owned by userA) for cardB (owned by userB). Throws if ownership changed. */
 export function swap(guildId: string, cardA: number, userA: string, cardB: number, userB: string): void {
+  const season = currentSeason(guildId);
   db.transaction(() => {
-    const q = db.query("UPDATE claims SET user_id = ? WHERE guild_id = ? AND card_id = ? AND user_id = ?");
-    const a = q.run(userB, guildId, cardA, userA).changes;
-    const b = q.run(userA, guildId, cardB, userB).changes;
+    const q = db.query("UPDATE claims SET user_id = ? WHERE guild_id = ? AND season = ? AND card_id = ? AND user_id = ?");
+    const a = q.run(userB, guildId, season, cardA, userA).changes;
+    const b = q.run(userA, guildId, season, cardB, userB).changes;
     if (a !== 1 || b !== 1) throw new Error("ownership changed"); // rolls the transaction back
   })();
 }
 
-export function collection(guildId: string, userId: string): Card[] {
+export function collection(guildId: string, userId: string, season = currentSeason(guildId)): Card[] {
   return db
-    .query<Card, [string, string]>(
+    .query<Card, [string, number, string]>(
       `SELECT c.* FROM cards c JOIN claims k ON k.card_id = c.id
-       WHERE k.guild_id = ? AND k.user_id = ? ORDER BY c.name`,
+       WHERE k.guild_id = ? AND k.season = ? AND k.user_id = ? ORDER BY c.name`,
     )
-    .all(guildId, userId);
+    .all(guildId, season, userId);
 }
 
-export function leaderboard(guildId: string, limit = 10): { userId: string; points: number; count: number }[] {
-  const rows = db
-    .query<{ user_id: string; rarity: Rarity; n: number }, [string]>(
-      `SELECT CAST(k.user_id AS TEXT) AS user_id, c.rarity, COUNT(*) AS n
-       FROM claims k JOIN cards c ON c.id = k.card_id WHERE k.guild_id = ? GROUP BY k.user_id, c.rarity`,
-    )
-    .all(guildId);
-  const totals = new Map<string, { points: number; count: number }>();
-  for (const r of rows) {
-    const t = totals.get(r.user_id) ?? { points: 0, count: 0 };
-    t.points += RARITIES[r.rarity].points * r.n;
-    t.count += r.n;
-    totals.set(r.user_id, t);
-  }
-  return [...totals].map(([userId, t]) => ({ userId, ...t })).sort((x, y) => y.points - x.points).slice(0, limit);
-}
 
 // ---------- card rush ----------
 
@@ -214,7 +313,8 @@ export function getLastChannel(guildId: string): string | null {
 /** Claim with no daily cost: used by rush drops, which are free. */
 export function claimFree(guildId: string, cardId: number, userId: string): boolean {
   try {
-    db.query("INSERT INTO claims (guild_id, card_id, user_id, claimed_at) VALUES (?, ?, ?, ?)").run(guildId, cardId, userId, now());
+    db.query("INSERT INTO claims (guild_id, season, card_id, user_id, claimed_at) VALUES (?, ?, ?, ?, ?)")
+      .run(guildId, currentSeason(guildId), cardId, userId, now());
   } catch {
     return false;
   }

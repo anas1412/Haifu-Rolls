@@ -210,6 +210,33 @@ async function dropRush(guildId: string): Promise<void> {
   }
 }
 
+// ---------- seasons ----------
+
+const PLACE_ICONS = ["🥇", "🥈", "🥉", "4.", "5."];
+
+/** Once the last free card is claimed, award medals, announce, and let the next season open. */
+async function checkSeasonEnd(guildId: string): Promise<void> {
+  if (Object.values(db.poolCounts(guildId)).some((n) => n)) return; // cards still available
+  const season = db.currentSeason(guildId);
+  const medals = db.closeSeason(guildId);
+  if (!medals.length) return;
+  console.log(`season ${season} closed in ${guildId}`);
+  try {
+    const channelId = db.getLastChannel(guildId);
+    const channel = channelId ? await client.channels.fetch(channelId) : null;
+    if (!channel?.isSendable()) return;
+    const lines = medals.map((m) => `${PLACE_ICONS[m.place - 1]} <@${m.userId}> — +${m.points} نقطة دائمة`);
+    const embed = new EmbedBuilder()
+      .setTitle(`🏁 انتهى الموسم ${season}`)
+      .setDescription(lines.join("\n"))
+      .setColor(0xf1c40f)
+      .setFooter({ text: `الموسم ${season + 1} بدأ · كل الكروت متاحة من جديد · /leaderboard للترتيب العام` });
+    await channel.send({ content: ar("🏁 **خلصت الكروت!** انتهى الموسم"), embeds: [arEmbed(embed)] });
+  } catch (err) {
+    console.error(`season ${season} announcement failed for ${guildId}:`, err);
+  }
+}
+
 // ---------- slash command definitions ----------
 
 const commands = [
@@ -222,7 +249,11 @@ const commands = [
     .setName("card")
     .setDescription("ابحث عن كرت بالاسم")
     .addStringOption((o) => o.setName("name").setDescription("اسم الكرت أو جزء منه").setRequired(true)),
-  new SlashCommandBuilder().setName("top").setDescription("قائمة المتصدرين"),
+  new SlashCommandBuilder()
+    .setName("top")
+    .setDescription("متصدرو الموسم")
+    .addIntegerOption((o) => o.setName("season").setDescription("رقم موسم سابق (اختياري)").setMinValue(1)),
+  new SlashCommandBuilder().setName("leaderboard").setDescription("الترتيب العام عبر كل المواسم"),
   new SlashCommandBuilder()
     .setName("divorce")
     .setDescription("تخلَّ عن كرت من مجموعتك")
@@ -355,11 +386,39 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
     case "top": {
       await i.deferReply();
-      const board = db.leaderboard(gid);
-      if (!board.length) return void i.editReply(ar("ما حد طلب شي بعد"));
-      const medals = ["🥇", "🥈", "🥉"];
-      const lines = board.map((r, n) => `${medals[n] ?? `${n + 1}.`} <@${r.userId}> — ${r.points} نقطة · ${r.count} كرت`);
-      return void i.editReply({ embeds: [arEmbed(new EmbedBuilder().setTitle("👑 المتصدرون").setDescription(lines.join("\n")).setColor(0xf1c40f))] });
+      const live = db.currentSeason(gid);
+      const season = i.options.getInteger("season") ?? live;
+      if (season > live) return void i.editReply(ar(`لا يوجد موسم ${season}. المواسم المتاحة من 1 إلى ${live}`));
+      const board = db.seasonTop(gid, season);
+      if (!board.length) return void i.editReply(ar(`ما حد طلب شي في الموسم ${season}`));
+      const lines = board.map((r, n) => `${PLACE_ICONS[n] ?? `${n + 1}.`} <@${r.userId}> — ${r.points} نقطة · ${r.count} كرت`);
+      const done = season < live;
+      const embed = new EmbedBuilder()
+        .setTitle(`👑 متصدرو الموسم ${season}`)
+        .setDescription(lines.join("\n"))
+        .setColor(0xf1c40f)
+        .setFooter({ text: done ? `الموسم ${season} · انتهى` : `الموسم ${season} · جارٍ الآن` });
+      return void i.editReply({ embeds: [arEmbed(embed)] });
+    }
+
+    case "leaderboard": {
+      await i.deferReply();
+      const live = db.currentSeason(gid);
+      const board = db.allTimeLeaderboard(gid);
+      if (!board.length) {
+        return void i.editReply(
+          ar(`ما خلص ولا موسم بعد. نحن في الموسم ${live}، وأول خمسة عند نهايته ياخذون نقاط دائمة: 5 · 4 · 3 · 2 · 1`),
+        );
+      }
+      const lines = board.map(
+        (r, n) => `${PLACE_ICONS[n] ?? `${n + 1}.`} <@${r.userId}> — ${r.points} نقطة · ${r.seasons} موسم${r.golds ? ` · ${r.golds} 🥇` : ""}`,
+      );
+      const embed = new EmbedBuilder()
+        .setTitle("🏆 الترتيب العام")
+        .setDescription(lines.join("\n"))
+        .setColor(0xe67e22)
+        .setFooter({ text: `كل المواسم · لا يُصفَّر أبداً · نحن الآن في الموسم ${live}` });
+      return void i.editReply({ embeds: [arEmbed(embed)] });
     }
 
     case "divorce": {
@@ -450,7 +509,8 @@ async function handleButton(i: ButtonInteraction) {
     const embed = cardEmbed(card, uid);
     if (footer) embed.setFooter({ text: footer });
     await i.update({ embeds: [embed], components: [claimRow(cardId, expiresAt, true)] });
-    return void i.followUp(ar(`💍 ${i.user} حصل على **${card.name}**!`));
+    await i.followUp(ar(`💍 ${i.user} حصل على **${card.name}**!`));
+    return void (await checkSeasonEnd(gid));
   }
 
   if (kind === "col") {
@@ -469,7 +529,8 @@ async function handleButton(i: ButtonInteraction) {
     // No expiry and no daily cost: the whole point of a rush card.
     if (!db.claimFree(gid, card.id, uid)) return void i.reply({ content: ar("💔 سبقك أحد إليها"), ...Ephemeral });
     await i.update({ embeds: [cardEmbed(card, uid)], components: [rushRow(card.id, true)] });
-    return void i.followUp(ar(`⚡ ${i.user} خطف **${card.name}** مجاناً!`));
+    await i.followUp(ar(`⚡ ${i.user} خطف **${card.name}** مجاناً!`));
+    return void (await checkSeasonEnd(gid));
   }
 
   if (kind === "xchg") {
