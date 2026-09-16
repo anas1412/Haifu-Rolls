@@ -550,4 +550,14 @@ async function handleButton(i: ButtonInteraction) {
   }
 }
 
+// Railway sends SIGTERM to the old container on every redeploy. Without this the process is
+// killed and reported as a crash; exiting 0 makes a normal swap look like the normal event it is.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    console.log(`${signal} received, shutting down cleanly`);
+    void client.destroy();
+    process.exit(0);
+  });
+}
+
 if (import.meta.main) client.login(token); // importable without connecting (tests)
