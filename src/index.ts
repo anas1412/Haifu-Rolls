@@ -29,7 +29,6 @@ import {
   COLLECTION_IDLE_SECONDS,
   DUEL_SUSPENSE_MS,
   DUEL_WINDOW_SECONDS,
-  DUELS_PER_DAY,
   EXCHANGE_WINDOW_SECONDS,
   IMAGE_BASE_URL,
   IMAGES_DIR,
@@ -612,20 +611,12 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const target = i.options.getUser("member", true);
       if (target.id === uid) return void i.reply({ ...note("ما تقدر تتحدى نفسك", COLOR.warn), ...Ephemeral });
       if (target.bot) return void i.reply({ ...note("ما تقدر تتحدى بوت", COLOR.warn), ...Ephemeral });
-      const used = db.duelsToday(gid, uid);
-      if (used >= DUELS_PER_DAY) {
-        return void i.reply({
-          ...note(`⏳ خلصت تحدياتك اليوم. تتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`, COLOR.warn),
-          ...Ephemeral,
-        });
-      }
       const mine = db.findCard(i.options.getString("my_card", true));
       const theirs = db.findCard(i.options.getString("their_card", true));
       if (!mine || db.ownerOf(gid, mine.id) !== uid) return void i.reply({ ...note("الكرت الأول ليس في مجموعتك", COLOR.warn), ...Ephemeral });
       if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) {
         return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${optionName(i, "member", target)}`, COLOR.warn), ...Ephemeral });
       }
-      db.recordDuel(gid, uid);
       const expiresAt = Date.now() + DUEL_WINDOW_SECONDS * 1000;
       const embed = new EmbedBuilder()
         .setAuthor({ name: ar("⚔️ تحدٍ") })
@@ -636,7 +627,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
           { name: `${callerName(i)} يراهن بـ`, value: stakeLine(mine), inline: true },
           { name: `${optionName(i, "member", target)} يراهن بـ`, value: stakeLine(theirs), inline: true },
         )
-        .setFooter({ text: `متبقي ${DUELS_PER_DAY - used - 1} تحدٍ لك اليوم · العرض صالح 5 دقائق` });
+        .setFooter({ text: "العرض صالح 5 دقائق" });
       const msg = await i.reply({
         content: `${target}`,
         embeds: [arEmbed(embed)],

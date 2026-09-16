@@ -72,11 +72,6 @@ export function init(): void {
       claimed_at REAL NOT NULL,
       PRIMARY KEY (guild_id, user_id)
     );
-    CREATE TABLE IF NOT EXISTS duels (
-      guild_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      started_at REAL NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS guild_channel (
       guild_id INTEGER PRIMARY KEY,
       channel_id INTEGER NOT NULL
@@ -84,6 +79,7 @@ export function init(): void {
   `);
   migrate();
   migrateRolls();
+  dropDuelsTable();
 }
 
 /** Old databases have a claims table with no season. Rebuild it once, keeping every row as season 1. */
@@ -110,6 +106,11 @@ function migrate(): void {
 }
 
 /** Rolls used to record only that a roll happened. Track the card too, to avoid repeats within a day. */
+/** Duels used to be capped per day. The tracking table is no longer read, so let it go. */
+function dropDuelsTable(): void {
+  db.exec("DROP TABLE IF EXISTS duels");
+}
+
 function migrateRolls(): void {
   const cols = db.query<{ name: string }, []>("PRAGMA table_info(rolls)").all().map((c) => c.name);
   if (cols.includes("card_id")) return;
@@ -382,17 +383,6 @@ export function deckBreakdown(guildId: string): { rarity: Rarity; total: number;
        GROUP BY c.rarity`,
     )
     .all(guildId, currentSeason(guildId));
-}
-
-export function duelsToday(guildId: string, userId: string): number {
-  return db
-    .query<{ n: number }, [string, string, number]>("SELECT COUNT(*) AS n FROM duels WHERE guild_id = ? AND user_id = ? AND started_at >= ?")
-    .get(guildId, userId, dayStart())!.n;
-}
-
-export function recordDuel(guildId: string, userId: string): void {
-  db.query("INSERT INTO duels (guild_id, user_id, started_at) VALUES (?, ?, ?)").run(guildId, userId, now());
-  db.query("DELETE FROM duels WHERE started_at < ?").run(dayStart());
 }
 
 /**

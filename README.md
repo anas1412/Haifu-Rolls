@@ -22,7 +22,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/divorce <id or name>` | Release a card you own |
 | `/gift <member> <id or name>` | Give a card away |
 | `/exchange <member> <my_card> <their_card>` | Propose a trade by id or name. The other member gets Accept / Decline buttons (5 min) |
-| `/duel <member> <my_card> <their_card>` | Stake a card against theirs. A coin flip decides, winner takes both. 3 per day |
+| `/duel <member> <my_card> <their_card>` | Stake a card against theirs. A random draw decides, winner takes both |
 | `/rescan` | (Manage Server) register new photos in `images/` |
 | `/backup` | (bot owner) download the database file |
 | `/restore <file>` | (bot owner) replace the database with an uploaded `haifa.db` |
@@ -87,14 +87,13 @@ straight **50/50 coin flip** decides it. The winner takes both cards.
 
 - Stakes are **free**: any card against any card. The defender has to accept, and both cards are shown with
   rarity and points before they decide, so consent is the safeguard rather than a rarity rule.
-- **3 duels started per person per day**, reset at midnight. Accepting someone else's duel costs nothing.
 - Ownership is re-checked at the moment of the flip. If either card moved while the offer was open the duel is
   cancelled and nothing changes.
 - On accept the message spins for a few seconds, alternating the spotlight before settling on the
   winner, then reveals the result. The outcome is decided and the cards awarded **before** the spin,
   so a dropped frame or a restart never changes who won.
-- Tune it with `DUELS_PER_DAY`, `DUEL_WINDOW_SECONDS`, and `DUEL_SUSPENSE_MS` (set to 0 for an
-  instant reveal) in `config.ts`.
+- No daily cap: the other side has to agree to every duel, so consent is the throttle.
+- Tune it with `DUEL_WINDOW_SECONDS` and `DUEL_SUSPENSE_MS` (set to 0 for an instant reveal) in `config.ts`.
 
 ## Seasons
 

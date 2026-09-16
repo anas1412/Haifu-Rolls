@@ -130,14 +130,6 @@ test("a duel whose stake moved first is rejected and changes nothing", () => {
   expect(db.ownerOf(D, b)).toBe(C);
 });
 
-test("duels started are capped per day", () => {
-  const fresh = "8888888888888888888";
-  expect(db.duelsToday(fresh, A)).toBe(0);
-  db.recordDuel(fresh, A);
-  db.recordDuel(fresh, A);
-  expect(db.duelsToday(fresh, A)).toBe(2);
-  expect(db.duelsToday(fresh, B)).toBe(0); // per player, not per server
-});
 
 // ---------- rolls: no repeats within a day ----------
 

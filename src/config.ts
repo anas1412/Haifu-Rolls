@@ -37,7 +37,7 @@ export const RUSH_MIN_RARITY: Rarity = "نادرة"; // drops are never worse th
 
 // Duel: stake one of your cards against someone else's. A coin flip decides; winner takes both.
 // Stakes are free on purpose, so a newcomer can win big. The defender has to accept, which is the safeguard.
-export const DUELS_PER_DAY = 3;          // duels each player may start per day
+// There is no daily cap: the other side must agree to every duel, so that consent is the throttle.
 export const DUEL_WINDOW_SECONDS = 300;  // how long the other side has to answer
 export const DUEL_SUSPENSE_MS = 1000;    // pause between the spin frames before the result. 0 reveals instantly
 
