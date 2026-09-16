@@ -90,7 +90,11 @@ straight **50/50 coin flip** decides it. The winner takes both cards.
 - **3 duels started per person per day**, reset at midnight. Accepting someone else's duel costs nothing.
 - Ownership is re-checked at the moment of the flip. If either card moved while the offer was open the duel is
   cancelled and nothing changes.
-- Tune it with `DUELS_PER_DAY` and `DUEL_WINDOW_SECONDS` in `config.ts`.
+- On accept the message spins for a few seconds, alternating the spotlight before settling on the
+  winner, then reveals the result. The outcome is decided and the cards awarded **before** the spin,
+  so a dropped frame or a restart never changes who won.
+- Tune it with `DUELS_PER_DAY`, `DUEL_WINDOW_SECONDS`, and `DUEL_SUSPENSE_MS` (set to 0 for an
+  instant reveal) in `config.ts`.
 
 ## Seasons
 

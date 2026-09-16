@@ -39,6 +39,7 @@ export const RUSH_MIN_RARITY: Rarity = "نادرة"; // drops are never worse th
 // Stakes are free on purpose, so a newcomer can win big. The defender has to accept, which is the safeguard.
 export const DUELS_PER_DAY = 3;          // duels each player may start per day
 export const DUEL_WINDOW_SECONDS = 300;  // how long the other side has to answer
+export const DUEL_SUSPENSE_MS = 1000;    // pause between the spin frames before the result. 0 reveals instantly
 
 export const IMAGES_DIR = "images";
 // Optional: serve card images from a public URL instead of uploading them as attachments.

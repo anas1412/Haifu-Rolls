@@ -27,6 +27,7 @@ import { scanNewImages } from "./scanner";
 import {
   CLAIM_WINDOW_SECONDS,
   COLLECTION_IDLE_SECONDS,
+  DUEL_SUSPENSE_MS,
   DUEL_WINDOW_SECONDS,
   DUELS_PER_DAY,
   EXCHANGE_WINDOW_SECONDS,
@@ -171,6 +172,24 @@ function duelRow(challenger: string, target: string, mine: number, theirs: numbe
     new ButtonBuilder().setCustomId(`duel:a:${tail}`).setLabel("قبول التحدي ⚔️").setStyle(ButtonStyle.Danger).setDisabled(disabled),
     new ButtonBuilder().setCustomId(`duel:d:${tail}`).setLabel("رفض").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
   );
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The coin is already flipped and the cards already awarded before any of this runs: the spin is
+ * only theatre. Three frames alternate the spotlight between the two players, then the result lands.
+ */
+const SPIN_FRAMES = 3;
+const spinBar = (frame: number) => "▰".repeat(frame + 1) + "▱".repeat(SPIN_FRAMES - frame);
+
+function spinEmbed(frame: number, spotlight: string, stakes: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setAuthor({ name: ar("⚔️ التحدي") })
+    .setTitle(ar("🎲 القرعة تدور..."))
+    .setDescription(ar(`${spinBar(frame)}\n✨ **${spotlight}**`))
+    .setColor(COLOR.warn)
+    .addFields({ name: ar("على المحك"), value: stakes });
 }
 
 /**
@@ -706,16 +725,29 @@ async function handleButton(i: ButtonInteraction) {
     // Discord renders mentions in descriptions and fields, but never in a title: use a plain name there.
     const loser = challengerWins ? target : challenger;
     const nameOf = async (id: string) => (await i.guild?.members.fetch(id).catch(() => null))?.displayName ?? "لاعب";
-    const [winnerName, loserName] = await Promise.all([nameOf(winner), nameOf(loser)]);
+    const [challengerName, targetName] = await Promise.all([nameOf(challenger), nameOf(target)]);
+    const [winnerName, loserName] = challengerWins ? [challengerName, targetName] : [targetName, challengerName];
+    const stakes = `${stakeLine(mine)}\n${stakeLine(theirs)}`;
+
+    // Spin first, reveal after. Every edit is best-effort: the cards are already awarded, so a
+    // dropped frame costs nothing but a little drama.
+    // The spotlight alternates, then settles on the winner so the spin looks like it lands on them.
+    const spotlights = [challengerName, targetName, winnerName];
+    await i.update({ content: "", embeds: [arEmbed(spinEmbed(0, spotlights[0]!, stakes))], components: [] });
+    for (let frame = 1; frame < SPIN_FRAMES; frame++) {
+      await sleep(DUEL_SUSPENSE_MS);
+      await i.editReply({ embeds: [arEmbed(spinEmbed(frame, spotlights[frame]!, stakes))] }).catch(() => {});
+    }
+    await sleep(DUEL_SUSPENSE_MS);
+
     const result = new EmbedBuilder()
       .setAuthor({ name: ar("⚔️ نتيجة التحدي") })
       .setTitle(ar(`🎉 فاز ${winnerName}`))
       .setDescription(ar(`<@${winner}> أخذ الكرتين، و<@${loser}> خسر رهانه.\nحظ أوفر يا ${loserName}.`))
       .setColor(COLOR.gold)
-      .addFields(
-        { name: ar("الغنيمة"), value: `${stakeLine(mine)}\n${stakeLine(theirs)}` },
-      );
-    return void i.update({ content: "", embeds: [arEmbed(result)], components: [duelRow(challenger, target, mine.id, theirs.id, 0, true)] });
+      .addFields({ name: ar("الغنيمة"), value: stakes });
+    await i.editReply({ embeds: [arEmbed(result)], components: [] }).catch(() => {});
+    return;
   }
 
   if (kind === "xchg") {
