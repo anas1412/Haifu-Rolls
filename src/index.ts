@@ -804,7 +804,7 @@ async function handleButton(i: ButtonInteraction) {
       .setTitle(ar(`🎉 فاز ${winnerName}`))
       .setDescription(ar(`<@${winner}> أخذ كل الكروت، و<@${loser}> خسر رهانه.\nحظ أوفر يا ${loserName}.`))
       .setColor(COLOR.gold)
-      .addFields({ name: ar("الغنيمة"), value: `${spoils.map(stakeLine).join("\n")}\n**${spoils.length} كرت · ${pointsOf(spoils)} نقطة**` });
+      .addFields({ name: ar("الغنيمة"), value: stakeBlock(spoils) }); // summarised: a raw list of every spoil overflows the 1024-char field and Discord drops the edit
     await i.editReply({ embeds: [arEmbed(result)], components: [] }).catch(() => {});
     return;
   }

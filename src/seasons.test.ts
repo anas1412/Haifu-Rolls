@@ -253,4 +253,11 @@ test("a huge stake still fits inside a Discord embed field", async () => {
   expect(rendered).toContain("100 كرت");      // the total still counts every card
   expect(rendered).toContain("5000 نقطة");    // 100 queens
   expect(rendered).toContain("كرت آخر");      // the rest are summarised, not listed
+
+  // The duel embeds put BOTH stakes in a single "على المحك" field, and the spoils of a duel are
+  // both sides added together. A 38-card duel once silently failed here: Discord rejected the
+  // edit, the message froze on the last spin frame, and the cards had already changed hands.
+  const bothSides = `${stakeBlock(many)}\n\n${stakeBlock(many)}`;
+  expect(ar(bothSides).length).toBeLessThan(1024);
+  expect(ar(stakeBlock([...many, ...many])).length).toBeLessThan(1024);
 });
