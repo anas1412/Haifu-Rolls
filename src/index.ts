@@ -34,6 +34,9 @@ import {
   RARITY_ORDER,
   ROLL_ONLY_UNCLAIMED,
   ROLLS_PER_DAY,
+  RUSH_MAX_HOURS,
+  RUSH_MIN_HOURS,
+  RUSH_MIN_RARITY,
 } from "./config";
 
 const token = process.env.DISCORD_TOKEN; // Bun loads .env automatically
@@ -79,10 +82,11 @@ function cardFiles(card: db.Card): AttachmentBuilder[] {
   return IMAGE_BASE_URL ? [] : [new AttachmentBuilder(join(IMAGES_DIR, card.file), { name: card.file })];
 }
 
-function pickCard(guildId: string): db.Card | null {
+export function pickCard(guildId: string, minRarity?: db.Card["rarity"]): db.Card | null {
   const scope = ROLL_ONLY_UNCLAIMED ? guildId : undefined;
   const pool = db.poolCounts(scope);
-  const tiers = RARITY_ORDER.filter((t) => pool[t]);
+  const floor = minRarity ? RARITY_ORDER.indexOf(minRarity) : 0;
+  const tiers = RARITY_ORDER.filter((t, idx) => idx >= floor && pool[t]);
   if (!tiers.length) return null;
   let roll = Math.random() * tiers.reduce((s, t) => s + RARITIES[t].weight, 0);
   let tier = tiers[tiers.length - 1]!;
@@ -169,6 +173,43 @@ function armIdle(msg: Message, idle: { components: ActionRowBuilder<ButtonBuilde
   );
 }
 
+// ---------- card rush ----------
+
+function rushRow(cardId: number, disabled = false) {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`rush:${cardId}`).setLabel("خذها مجاناً ⚡").setStyle(ButtonStyle.Primary).setDisabled(disabled),
+  );
+}
+
+const rushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Arm the next drop for one server, at a random point inside the configured window. */
+function scheduleRush(guildId: string): void {
+  clearTimeout(rushTimers.get(guildId));
+  const hours = RUSH_MIN_HOURS + Math.random() * (RUSH_MAX_HOURS - RUSH_MIN_HOURS);
+  rushTimers.set(guildId, setTimeout(() => dropRush(guildId), hours * 3600 * 1000));
+}
+
+/** Drop a free card in the channel the bot was last used in. Always re-arms, even on failure. */
+async function dropRush(guildId: string): Promise<void> {
+  try {
+    const channelId = db.getLastChannel(guildId); // no activity yet -> nowhere to drop
+    const card = channelId ? pickCard(guildId, RUSH_MIN_RARITY) : null;
+    if (channelId && card) {
+      const channel = await client.channels.fetch(channelId);
+      if (channel?.isSendable()) {
+        const embed = cardEmbed(card).setFooter({ text: ar("كرت طائر · مجاني · أول من يضغط يربحه") });
+        await channel.send({ content: ar("⚡ **كرت طائر!** أول واحد يضغط ياخذه مجاناً"), embeds: [embed], components: [rushRow(card.id)], files: cardFiles(card) });
+        console.log(`rush drop in ${guildId}: ${card.name} [${card.rarity}]`);
+      }
+    }
+  } catch (err) {
+    console.error(`rush drop failed for ${guildId}:`, err);
+  } finally {
+    scheduleRush(guildId);
+  }
+}
+
 // ---------- slash command definitions ----------
 
 const commands = [
@@ -235,11 +276,13 @@ client.once(Events.ClientReady, async (c) => {
   console.log(`logged in as ${c.user.tag}, commands synced to ${c.guilds.cache.size} server(s)`);
   const added = await scanNewImages();
   console.log(`startup scan: ${added.length} new cards`);
+  for (const id of c.guilds.cache.keys()) scheduleRush(id);
 });
 
 client.on(Events.GuildCreate, async (guild) => {
   try {
     await syncGuild(guild);
+    scheduleRush(guild.id);
     console.log(`joined ${guild.name} (${guild.id}), commands synced`);
   } catch (err) {
     // Usually the invite link lacked the applications.commands scope: Discord answers 403 Missing Access.
@@ -269,6 +312,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 async function handleCommand(i: ChatInputCommandInteraction) {
   if (!i.inGuild()) return void i.reply({ content: ar("هذا البوت يعمل داخل السيرفرات فقط"), ...Ephemeral });
   const gid = i.guildId, uid = i.user.id;
+  if (i.channelId) db.setLastChannel(gid, i.channelId); // rush cards drop wherever the bot is being used
 
   switch (i.commandName) {
     case "roll": {
@@ -417,6 +461,15 @@ async function handleButton(i: ButtonInteraction) {
     if (!view) return void i.update({ content: ar(`${user.displayName} ما عنده كروت بعد`), embeds: [], components: [] });
     await i.update(view.payload);
     return void armIdle(i.message, view.idle);
+  }
+
+  if (kind === "rush") {
+    const card = db.getCard(Number(rest[0]));
+    if (!card) return;
+    // No expiry and no daily cost: the whole point of a rush card.
+    if (!db.claimFree(gid, card.id, uid)) return void i.reply({ content: ar("💔 سبقك أحد إليها"), ...Ephemeral });
+    await i.update({ embeds: [cardEmbed(card, uid)], components: [rushRow(card.id, true)] });
+    return void i.followUp(ar(`⚡ ${i.user} خطف **${card.name}** مجاناً!`));
   }
 
   if (kind === "xchg") {

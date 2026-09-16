@@ -63,6 +63,10 @@ export function init(): void {
       claimed_at REAL NOT NULL,
       PRIMARY KEY (guild_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS guild_channel (
+      guild_id INTEGER PRIMARY KEY,
+      channel_id INTEGER NOT NULL
+    );
   `);
 }
 
@@ -191,6 +195,30 @@ export function leaderboard(guildId: string, limit = 10): { userId: string; poin
     totals.set(r.user_id, t);
   }
   return [...totals].map(([userId, t]) => ({ userId, ...t })).sort((x, y) => y.points - x.points).slice(0, limit);
+}
+
+// ---------- card rush ----------
+
+/** Remember where the bot was last used in a server; that is where rush cards drop. */
+export function setLastChannel(guildId: string, channelId: string): void {
+  db.query("INSERT OR REPLACE INTO guild_channel (guild_id, channel_id) VALUES (?, ?)").run(guildId, channelId);
+}
+
+export function getLastChannel(guildId: string): string | null {
+  const row = db
+    .query<{ channel_id: string }, [string]>("SELECT CAST(channel_id AS TEXT) AS channel_id FROM guild_channel WHERE guild_id = ?")
+    .get(guildId);
+  return row?.channel_id ?? null;
+}
+
+/** Claim with no daily cost: used by rush drops, which are free. */
+export function claimFree(guildId: string, cardId: number, userId: string): boolean {
+  try {
+    db.query("INSERT INTO claims (guild_id, card_id, user_id, claimed_at) VALUES (?, ?, ?, ?)").run(guildId, cardId, userId, now());
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 // ---------- daily limits (reset at local midnight) ----------

@@ -23,6 +23,12 @@ export const EXCHANGE_WINDOW_SECONDS = 300;
 export const COLLECTION_IDLE_SECONDS = 120; // /collection browsing buttons grey out after this long without a click
 export const ROLL_ONLY_UNCLAIMED = true; // true: /roll only shows cards nobody in the server owns yet
 
+// Card Rush: every few hours the bot drops a card in the channel it was last used in.
+// First to press the button keeps it, for free, and it never expires.
+export const RUSH_MIN_HOURS = 2;   // shortest wait between drops
+export const RUSH_MAX_HOURS = 6;   // longest wait between drops
+export const RUSH_MIN_RARITY: Rarity = "نادرة"; // drops are never worse than this
+
 export const IMAGES_DIR = "images";
 // Optional: serve card images from a public URL instead of uploading them as attachments.
 // Leave empty ("") to upload attachments. Only works with a PUBLIC repo.
