@@ -233,6 +233,16 @@ test("the stake parser accepts comma lists and rejects bad input", async () => {
   expect("cards" in many && many.cards).toHaveLength(6); // no cap on how many you may stake
 });
 
+test("'all' stakes the whole collection without typing any numbers", async () => {
+  const { parseStake } = await import("./index");
+  const owned = [db.getCard(1)!, db.getCard(2)!];
+
+  expect(parseStake("all", owned)).toEqual({ cards: owned });
+  expect(parseStake("ALL", owned)).toEqual({ cards: owned });   // case does not matter
+  expect(parseStake(" الكل ", owned)).toEqual({ cards: owned }); // and the Arabic word works too
+  expect(parseStake("all", [])).toEqual({ error: "المجموعة فارغة" });
+});
+
 test("a huge stake still fits inside a Discord embed field", async () => {
   const { stakeBlock, ar } = await import("./index");
   const many = Array.from({ length: 100 }, (_, n) =>

@@ -213,10 +213,13 @@ export function stakeBlock(cards: db.Card[]): string {
 }
 
 /**
- * Resolve "42,43,name" into cards. Rejects unknown cards, repeats, and oversized bundles so the
- * offer embed can never misrepresent what is actually at stake.
+ * Resolve "42,43,name" into cards, or "all" into everything `owned` holds. Rejects unknown cards
+ * and repeats so the offer embed can never misrepresent what is actually at stake.
  */
-export function parseStake(input: string): { cards: db.Card[] } | { error: string } {
+export function parseStake(input: string, owned: db.Card[] = []): { cards: db.Card[] } | { error: string } {
+  if (/^(all|الكل)$/i.test(input.trim())) {
+    return owned.length ? { cards: owned } : { error: "المجموعة فارغة" };
+  }
   const parts = [...new Set(input.split(",").map((p) => p.trim()).filter(Boolean))];
   if (!parts.length) return { error: "ما حددت أي كرت" };
   const cards: db.Card[] = [];
@@ -415,8 +418,8 @@ const commands = [
     .setName("duel")
     .setDescription("تحدَّ عضواً: كرتك مقابل كرته، والفائز يأخذ الاثنين")
     .addUserOption((o) => o.setName("member").setDescription("الخصم").setRequired(true))
-    .addStringOption((o) => o.setName("my_card").setDescription("كرتك، أو عدة كروت بينها فاصلة: 42,43").setRequired(true))
-    .addStringOption((o) => o.setName("their_card").setDescription("كرته، أو عدة كروت بينها فاصلة").setRequired(true)),
+    .addStringOption((o) => o.setName("my_card").setDescription("كرتك، أو عدة كروت بينها فاصلة: 42,43، أو all لكل مجموعتك").setRequired(true))
+    .addStringOption((o) => o.setName("their_card").setDescription("كرته، أو عدة كروت بينها فاصلة، أو all لكل مجموعته").setRequired(true)),
   new SlashCommandBuilder()
     .setName("rescan")
     .setDescription("(إدارة) افحص الصور الجديدة في مجلد images")
@@ -670,9 +673,9 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       if (target.id === uid) return void i.reply({ ...note("ما تقدر تتحدى نفسك", COLOR.warn), ...Ephemeral });
       if (target.bot) return void i.reply({ ...note("ما تقدر تتحدى بوت", COLOR.warn), ...Ephemeral });
 
-      const mineParsed = parseStake(i.options.getString("my_card", true));
+      const mineParsed = parseStake(i.options.getString("my_card", true), db.collection(gid, uid));
       if ("error" in mineParsed) return void i.reply({ ...note(mineParsed.error, COLOR.warn), ...Ephemeral });
-      const theirsParsed = parseStake(i.options.getString("their_card", true));
+      const theirsParsed = parseStake(i.options.getString("their_card", true), db.collection(gid, target.id));
       if ("error" in theirsParsed) return void i.reply({ ...note(theirsParsed.error, COLOR.warn), ...Ephemeral });
       const mine = mineParsed.cards, theirs = theirsParsed.cards;
 
