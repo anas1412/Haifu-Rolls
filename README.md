@@ -22,7 +22,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/divorce <id or name>` | Release a card you own |
 | `/gift <member> <id or name>` | Give a card away |
 | `/exchange <member> <my_card> <their_card>` | Propose a trade by id or name. The other member gets Accept / Decline buttons (5 min) |
-| `/duel <member> <my_card> <their_card>` | Stake a card against theirs. A random draw decides, winner takes both |
+| `/duel <member> <my_card> <their_card>` | Stake cards against theirs, comma-separated for several. A draw decides, winner takes all |
 | `/rescan` | (Manage Server) register new photos in `images/` |
 | `/backup` | (bot owner) download the database file |
 | `/restore <file>` | (bot owner) replace the database with an uploaded `haifa.db` |
@@ -82,18 +82,21 @@ Anywhere a command asks for a card you can type the number instead of the Arabic
 
 ## Duels
 
-`/duel` stakes one of your cards against someone else's. They get Accept / Decline buttons, and on accept a
-straight **50/50 coin flip** decides it. The winner takes both cards.
+`/duel` stakes your cards against someone else's. Either side can put up **several cards at once**,
+separated by commas: `/duel @them 42,43,44 322`. They get Accept / Decline buttons, and on accept a
+straight **50/50 coin flip** decides it. The winner takes everything staked.
 
-- Stakes are **free**: any card against any card. The defender has to accept, and both cards are shown with
-  rarity and points before they decide, so consent is the safeguard rather than a rarity rule.
-- Ownership is re-checked at the moment of the flip. If either card moved while the offer was open the duel is
-  cancelled and nothing changes.
+- Stakes are **free**: anything against anything. The defender has to accept, and each side's cards are
+  listed with a running total (`5 كرت · 15 نقطة`), so a lopsided offer is obvious before they decide.
+- Up to `DUEL_MAX_CARDS` (5) cards per side.
+- Every card's owner is re-checked at the moment of the flip, and the whole duel is one atomic write:
+  if any single card moved while the offer was open, nothing changes at all.
 - On accept the message spins for a few seconds, then reveals the result. Every spin frame is
   identical for both players, so nothing in it hints at the outcome. The winner is decided and the
   cards awarded **before** the spin, so a dropped frame or a restart never changes who won.
 - No daily cap: the other side has to agree to every duel, so consent is the throttle.
-- Tune it with `DUEL_WINDOW_SECONDS` and `DUEL_SUSPENSE_MS` (set to 0 for an instant reveal) in `config.ts`.
+- Tune it with `DUEL_MAX_CARDS`, `DUEL_WINDOW_SECONDS`, and `DUEL_SUSPENSE_MS` (0 for an instant reveal) in `config.ts`.
+- Pending offers live in memory, so a restart cancels any that are still open. They only last 5 minutes anyway.
 
 ## Admin dashboard
 
