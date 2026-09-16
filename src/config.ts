@@ -15,6 +15,12 @@ export const RARITIES: Record<Rarity, { weight: number; points: number; emoji: s
 };
 export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
 
+/**
+ * Tiers that exist but are never named in public listings like /deck. Their cards still count
+ * in totals, so the numbers stay truthful; the tier just is not advertised.
+ */
+export const SECRET_RARITIES: Rarity[] = ["المنتخب"];
+
 export const ROLLS_PER_DAY = 3;          // rolls each player gets per day
 // One claim per player per day (fixed).
 // Both reset at midnight, local time of the machine running the bot.

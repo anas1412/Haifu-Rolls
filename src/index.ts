@@ -39,6 +39,7 @@ import {
   RUSH_MAX_HOURS,
   RUSH_MIN_HOURS,
   RUSH_MIN_RARITY,
+  SECRET_RARITIES,
 } from "./config";
 
 const token = process.env.DISCORD_TOKEN; // Bun loads .env automatically
@@ -103,20 +104,32 @@ function cardFiles(card: db.Card): AttachmentBuilder[] {
   return IMAGE_BASE_URL ? [] : [new AttachmentBuilder(join(IMAGES_DIR, card.file), { name: card.file })];
 }
 
-export function pickCard(guildId: string, minRarity?: db.Card["rarity"]): db.Card | null {
-  const scope = ROLL_ONLY_UNCLAIMED ? guildId : undefined;
-  const pool = db.poolCounts(scope);
+/** Weighted pick across the tiers that still have a candidate once `skip` is removed. */
+function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>): db.Card | null {
   const floor = minRarity ? RARITY_ORDER.indexOf(minRarity) : 0;
-  const tiers = RARITY_ORDER.filter((t, idx) => idx >= floor && pool[t]);
+  const tiers = RARITY_ORDER.slice(floor)
+    .map((tier) => ({ tier, cards: db.cardsInRarity(tier, scope).filter((c) => !skip.has(c.id)) }))
+    .filter((t) => t.cards.length);
   if (!tiers.length) return null;
-  let roll = Math.random() * tiers.reduce((s, t) => s + RARITIES[t].weight, 0);
-  let tier = tiers[tiers.length - 1]!;
+  let roll = Math.random() * tiers.reduce((sum, t) => sum + RARITIES[t.tier].weight, 0);
+  let chosen = tiers[tiers.length - 1]!;
   for (const t of tiers) {
-    roll -= RARITIES[t].weight;
-    if (roll < 0) { tier = t; break; }
+    roll -= RARITIES[t.tier].weight;
+    if (roll < 0) { chosen = t; break; }
   }
-  const cards = db.cardsInRarity(tier, scope);
-  return cards[Math.floor(Math.random() * cards.length)] ?? null;
+  return chosen.cards[Math.floor(Math.random() * chosen.cards.length)]!;
+}
+
+/**
+ * Pick a card to show. `exclude` holds cards the player has already seen today: they are skipped
+ * so the same card is not rolled twice, unless skipping them would leave nothing to roll at all.
+ */
+export function pickCard(guildId: string, minRarity?: db.Card["rarity"], exclude: Iterable<number> = []): db.Card | null {
+  const scope = ROLL_ONLY_UNCLAIMED ? guildId : undefined;
+  const skip = new Set(exclude);
+  const fresh = weightedPick(scope, minRarity, skip);
+  if (fresh || !skip.size) return fresh;
+  return weightedPick(scope, minRarity, new Set()); // nothing new left, repeats are allowed again
 }
 
 /**
@@ -322,6 +335,7 @@ const commands = [
     .addUserOption((o) => o.setName("member").setDescription("الطرف الآخر").setRequired(true))
     .addStringOption((o) => o.setName("my_card").setDescription("رقم كرتك أو اسمه").setRequired(true))
     .addStringOption((o) => o.setName("their_card").setDescription("رقم كرته أو اسمه").setRequired(true)),
+  new SlashCommandBuilder().setName("deck").setDescription("كل الدرجات: كم كرت مطلوب وكم باقي"),
   new SlashCommandBuilder()
     .setName("duel")
     .setDescription("تحدَّ عضواً: كرتك مقابل كرته، والفائز يأخذ الاثنين")
@@ -408,13 +422,13 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     case "roll": {
       const used = db.rollsToday(gid, uid);
       if (used >= ROLLS_PER_DAY) return void i.reply({ ...note(`⏳ خلصت رميّات اليوم. تتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`, COLOR.warn), ...Ephemeral });
-      const card = pickCard(gid);
+      const card = pickCard(gid, undefined, db.cardsRolledToday(gid, uid));
       if (!card) {
         const any = Object.keys(db.poolCounts()).length > 0;
         return void i.reply({ ...note(any ? "كل الكروت مملوكة في هذا السيرفر. انتظر /divorce من أحد" : "ما في كروت بعد. حطّ صور في مجلد images وجرّب /rescan", COLOR.warn), ...Ephemeral });
       }
       await i.deferReply(); // acknowledge within Discord's 3-second window
-      db.recordRoll(gid, uid);
+      db.recordRoll(gid, uid, card.id);
       const owner = db.ownerOf(gid, card.id);
       const embed = cardEmbed(card, owner).setFooter({ text: ar(`رميّات متبقية اليوم: ${ROLLS_PER_DAY - used - 1}/${ROLLS_PER_DAY}`) });
       if (owner) return void (await i.editReply({ embeds: [embed], files: cardFiles(card) }));
@@ -549,6 +563,30 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const pool = db.poolCounts();
       const total = Object.values(pool).reduce((a, b) => a + (b ?? 0), 0);
       return void i.editReply(note(`✅ تم الاستبدال. ${total} كرت في القاعدة الجديدة.`, COLOR.ok));
+    }
+
+    case "deck": {
+      await i.deferReply();
+      const rows = db.deckBreakdown(gid);
+      if (!rows.length) return void i.editReply(note("ما في كروت بعد", COLOR.warn));
+      const by = new Map(rows.map((r) => [r.rarity, r]));
+      const total = rows.reduce((n, r) => n + r.total, 0);
+      const claimed = rows.reduce((n, r) => n + r.claimed, 0);
+      const embed = new EmbedBuilder()
+        .setTitle("🎴 الكروت")
+        .setDescription(`مطلوب **${claimed}** من **${total}** · باقي **${total - claimed}** كرت`)
+        .setColor(COLOR.info)
+        .setFooter({ text: `الموسم ${db.currentSeason(gid)} · ينتهي عندما يُطلب آخر كرت` });
+      for (const tier of [...RARITY_ORDER].reverse()) {
+        const r = by.get(tier);
+        if (!r || SECRET_RARITIES.includes(tier)) continue; // counted in the totals, just not named
+        embed.addFields({
+          name: `${RARITIES[tier].emoji} ${tier}`,
+          value: `باقي ${r.total - r.claimed} من ${r.total}`,
+          inline: true,
+        });
+      }
+      return void i.editReply({ embeds: [arEmbed(embed)] });
     }
 
     case "duel": {

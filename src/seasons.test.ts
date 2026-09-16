@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "haifu-test-")), "t.db");
+process.env.DISCORD_TOKEN = "dummy"; // lets index.ts load without connecting
 const db = await import("./db");
 db.init();
 
@@ -136,4 +137,65 @@ test("duels started are capped per day", () => {
   db.recordDuel(fresh, A);
   expect(db.duelsToday(fresh, A)).toBe(2);
   expect(db.duelsToday(fresh, B)).toBe(0); // per player, not per server
+});
+
+// ---------- rolls: no repeats within a day ----------
+
+const { pickCard } = await import("./index");
+const P = "6666666666666666666"; // fresh guild for roll tests
+
+const { RARITY_ORDER } = await import("./config");
+const allFreeIds = (g: string) => RARITY_ORDER.flatMap((t) => db.cardsInRarity(t, g).map((c) => c.id));
+
+test("a card already rolled today is never offered again", () => {
+  const excluded = allFreeIds(P).slice(0, 3);
+  expect(excluded.length).toBe(3);
+  for (let n = 0; n < 300; n++) {
+    const got = pickCard(P, undefined, excluded)!;
+    expect(excluded).not.toContain(got.id); // the whole point of the fix
+  }
+});
+
+test("repeats are allowed again only when nothing new is left", () => {
+  const solo = "5555000055550000555";
+  const everything = allFreeIds(solo); // exclude the entire deck, every tier
+  expect(everything.length).toBeGreaterThan(0);
+  const got = pickCard(solo, undefined, everything);
+  expect(got).not.toBeNull(); // must fall back rather than refuse to roll
+  expect(everything).toContain(got!.id);
+});
+
+test("an exhausted deck still returns nothing", () => {
+  const empty = "4444000044440000444";
+  for (const c of db.cardsInRarity("عادية", empty)) db.claimFree(empty, c.id, A);
+  for (const tier of ["مميزة", "نادرة", "أسطورية", "الملكة", "المنتخب"] as const) {
+    for (const c of db.cardsInRarity(tier, empty)) db.claimFree(empty, c.id, A);
+  }
+  expect(pickCard(empty, undefined, [])).toBeNull();
+});
+
+test("rolls remember which card they showed", () => {
+  const g = "3333000033330000333";
+  const card = db.addCard("r5.jpg", "r5", "نادرة", "d");
+  expect(db.cardsRolledToday(g, A)).toEqual([]);
+  db.recordRoll(g, A, card);
+  expect(db.cardsRolledToday(g, A)).toEqual([card]);
+  expect(db.cardsRolledToday(g, B)).toEqual([]); // per player
+  expect(db.rollsToday(g, A)).toBe(1);
+});
+
+// ---------- /deck ----------
+
+test("the deck breakdown counts claimed and free per rarity", () => {
+  const g = "2222000022220000222";
+  const a = db.addCard("k1.jpg", "ك1د", "نادرة", "d");
+  db.addCard("k2.jpg", "ك2د", "نادرة", "d");
+  db.claimFree(g, a, A);
+
+  const rare = db.deckBreakdown(g).find((r) => r.rarity === "نادرة")!;
+  expect(rare.claimed).toBe(1);
+  expect(rare.total).toBeGreaterThanOrEqual(2);
+  // every card in the deck is counted exactly once
+  const total = db.deckBreakdown(g).reduce((n, r) => n + r.total, 0);
+  expect(total).toBe(db.allNames().length);
 });

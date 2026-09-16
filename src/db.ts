@@ -83,6 +83,7 @@ export function init(): void {
     );
   `);
   migrate();
+  migrateRolls();
 }
 
 /** Old databases have a claims table with no season. Rebuild it once, keeping every row as season 1. */
@@ -106,6 +107,14 @@ function migrate(): void {
     COMMIT;
   `);
   console.log("migrated claims: every existing claim is now season 1");
+}
+
+/** Rolls used to record only that a roll happened. Track the card too, to avoid repeats within a day. */
+function migrateRolls(): void {
+  const cols = db.query<{ name: string }, []>("PRAGMA table_info(rolls)").all().map((c) => c.name);
+  if (cols.includes("card_id")) return;
+  db.exec("ALTER TABLE rolls ADD COLUMN card_id INTEGER"); // old rows keep NULL and simply exclude nothing
+  console.log("migrated rolls: now recording which card was rolled");
 }
 
 const now = () => Date.now() / 1000;
@@ -349,9 +358,30 @@ export function rollsToday(guildId: string, userId: string): number {
     .get(guildId, userId, dayStart())!.n;
 }
 
-export function recordRoll(guildId: string, userId: string): void {
-  db.query("INSERT INTO rolls (guild_id, user_id, rolled_at) VALUES (?, ?, ?)").run(guildId, userId, now());
+export function recordRoll(guildId: string, userId: string, cardId: number): void {
+  db.query("INSERT INTO rolls (guild_id, user_id, rolled_at, card_id) VALUES (?, ?, ?, ?)").run(guildId, userId, now(), cardId);
   db.query("DELETE FROM rolls WHERE rolled_at < ?").run(dayStart());
+}
+
+/** Cards this player has already been shown today, so their remaining rolls can avoid them. */
+export function cardsRolledToday(guildId: string, userId: string): number[] {
+  return db
+    .query<{ card_id: number }, [string, string, number]>(
+      "SELECT card_id FROM rolls WHERE guild_id = ? AND user_id = ? AND rolled_at >= ? AND card_id IS NOT NULL",
+    )
+    .all(guildId, userId, dayStart())
+    .map((r) => r.card_id);
+}
+
+/** Per-rarity breakdown of the whole deck for this server's live season. */
+export function deckBreakdown(guildId: string): { rarity: Rarity; total: number; claimed: number }[] {
+  return db
+    .query<{ rarity: Rarity; total: number; claimed: number }, [string, number]>(
+      `SELECT c.rarity, COUNT(*) AS total, SUM(CASE WHEN k.card_id IS NULL THEN 0 ELSE 1 END) AS claimed
+       FROM cards c LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ? AND k.season = ?
+       GROUP BY c.rarity`,
+    )
+    .all(guildId, currentSeason(guildId));
 }
 
 export function duelsToday(guildId: string, userId: string): number {

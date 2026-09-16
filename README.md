@@ -16,6 +16,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/roll` | Roll a random card. Unclaimed cards show a claim button for 30 seconds |
 | `/collection [member]` | Summary page plus one card per page with its photo. Prev / next buttons, greyed out after 2 idle minutes |
 | `/card <id or name>` | Look up a card and see who owns it |
+| `/deck` | How many cards exist, how many are claimed, and how many are left per rarity |
 | `/top [season]` | This season's standings. Pass a number to see a finished season |
 | `/leaderboard` | All-time table of season medals. Never resets |
 | `/divorce <id or name>` | Release a card you own |
@@ -39,6 +40,9 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 **Card Rush:** every 2-6 hours the bot drops a card in the channel it was last used in. It is نادرة or better,
 costs nothing, never expires, and the first person to press the button keeps it. Late joiners catch up here.
 Tune it with `RUSH_MIN_HOURS`, `RUSH_MAX_HOURS`, and `RUSH_MIN_RARITY` in `config.ts`.
+
+A player is never shown the same card twice in one day's rolls, unless every remaining card has
+already been shown to them.
 
 Rolls only show cards nobody in the server owns yet (`ROLL_ONLY_UNCLAIMED` in `src/config.ts`; set to `False` to roll owned cards too).
 
