@@ -42,3 +42,11 @@ test("each line is isolated separately", () => {
 test("empty lines are left untouched", () => {
   expect(ar("أول\n\nثاني")).toBe(`${RLI}أول${PDI}\n\n${RLI}ثاني${PDI}`);
 });
+
+test("a stake line stays a single right-to-left line", () => {
+  // Two-line stakes staggered in Discord: one line leaned left, the other right.
+  const out = ar("🟢 الدانتيل العاجي · 3 نقطة · #32");
+  expect(out.split("\n")).toHaveLength(1);
+  expect(out).not.toContain(LRI); // numbers fenced by Arabic words need no extra isolate
+  expect(out.startsWith(RLI) && out.endsWith(PDI)).toBe(true);
+});

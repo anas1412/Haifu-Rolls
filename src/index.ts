@@ -160,8 +160,12 @@ function duelRow(challenger: string, target: string, mine: number, theirs: numbe
   );
 }
 
-/** One line describing a staked card: rarity, name, number and what it is worth. */
-const stakeLine = (c: db.Card) => `${RARITIES[c.rarity].emoji} ${c.name}\n\`#${c.id}\` · ${RARITIES[c.rarity].points} نقطة`;
+/**
+ * A staked card on a single line. Splitting it over two lines staggers them, because each line
+ * gets its own direction, and a line starting with a code chip lands on the opposite side.
+ * Leading with the Arabic name keeps the whole line unambiguously right-to-left.
+ */
+const stakeLine = (c: db.Card) => `${RARITIES[c.rarity].emoji} ${c.name} · ${RARITIES[c.rarity].points} نقطة · #${c.id}`;
 
 // ---------- /collection browsing ----------
 
@@ -671,7 +675,7 @@ async function handleButton(i: ButtonInteraction) {
       .setDescription(ar(`<@${winner}> أخذ الكرتين، و<@${loser}> خسر رهانه.\nحظ أوفر يا ${loserName}.`))
       .setColor(COLOR.gold)
       .addFields(
-        { name: ar("الغنيمة"), value: `${stakeLine(mine)}\n\n${stakeLine(theirs)}` },
+        { name: ar("الغنيمة"), value: `${stakeLine(mine)}\n${stakeLine(theirs)}` },
       );
     return void i.update({ content: "", embeds: [arEmbed(result)], components: [duelRow(challenger, target, mine.id, theirs.id, 0, true)] });
   }
