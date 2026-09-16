@@ -53,7 +53,22 @@ const Ephemeral = { flags: MessageFlags.Ephemeral } as const;
  * Latin names or numbers. Wrapping each line in a right-to-left isolate (U+2067 ... U+2069)
  * makes it read in natural Arabic order while mentions still render as pills.
  */
-const ar = (s: string): string => s.split("\n").map((l) => (l ? `\u2067${l}\u2069` : l)).join("\n");
+// A run of Latin/digit tokens joined by neutral punctuation ("5 · 4 · 3", "Send Messages").
+// Inside an RTL line these reverse, so each run gets its own left-to-right isolate.
+const LTR_RUN = /[0-9A-Za-z]+(?:[ \t·•\-–—,:/]+[0-9A-Za-z]+)+/g;
+
+export const ar = (s: string): string =>
+  s
+    .split("\n")
+    .map((l) => (l ? `\u2067${l.replace(LTR_RUN, (run) => `\u2066${run}\u2069`)}\u2069` : l))
+    .join("\n");
+
+const COLOR = { info: 0xe91e63, warn: 0xe67e22, ok: 0x2ecc71, gold: 0xf1c40f } as const;
+
+/** Wrap a one-liner in an embed so no reply ever looks like a raw text dump. */
+function note(text: string, color: number = COLOR.info) {
+  return { embeds: [arEmbed(new EmbedBuilder().setDescription(text).setColor(color))] };
+}
 
 /** Apply ar() to every text part of an embed. */
 function arEmbed(e: EmbedBuilder): EmbedBuilder {
@@ -73,7 +88,11 @@ function cardEmbed(card: db.Card, ownerId: string | null = null): EmbedBuilder {
     .setTitle(ar(`${r.emoji} ${card.name}`))
     .setDescription(ar(card.description))
     .setColor(r.color)
-    .addFields({ name: ar("الندرة"), value: ar(card.rarity), inline: true }, { name: ar("المالك"), value: ar(ownerId ? `<@${ownerId}>` : "متاحة 💍"), inline: true })
+    .addFields(
+      { name: ar("الرقم"), value: ar(`#${card.id}`), inline: true },
+      { name: ar("الندرة"), value: ar(card.rarity), inline: true },
+      { name: ar("المالك"), value: ar(ownerId ? `<@${ownerId}>` : "متاحة 💍"), inline: true },
+    )
     .setImage(IMAGE_BASE_URL ? `${IMAGE_BASE_URL.replace(/\/$/, "")}/${card.file}` : `attachment://${card.file}`);
 }
 
@@ -141,10 +160,11 @@ export function collectionPage(gid: string, user: Pick<User, "id" | "displayName
     const points = cards.reduce((s, c) => s + RARITIES[c.rarity].points, 0);
     embed = new EmbedBuilder().setTitle(`مجموعة ${user.displayName}`).setColor(0xe91e63).setFooter({ text: `${cards.length} كرت · ${points} نقطة` });
     for (const tier of [...RARITY_ORDER].reverse()) {
-      const names = cards.filter((c) => c.rarity === tier).map((c) => c.name);
-      if (!names.length) continue;
-      const more = names.length > 15 ? `\n… و${names.length - 15} غيرها` : "";
-      embed.addFields({ name: `${RARITIES[tier].emoji} ${tier} (${names.length})`, value: names.slice(0, 15).join("\n") + more });
+      const owned = cards.filter((c) => c.rarity === tier);
+      if (!owned.length) continue;
+      const more = owned.length > 15 ? `\n… و${owned.length - 15} غيرها` : "";
+      const names = owned.slice(0, 15).map((c) => `\`#${c.id}\` ${c.name}`);
+      embed.addFields({ name: `${RARITIES[tier].emoji} ${tier} (${owned.length})`, value: names.join("\n") + more });
     }
     arEmbed(embed);
   } else {
@@ -212,7 +232,7 @@ async function dropRush(guildId: string): Promise<void> {
 
 // ---------- seasons ----------
 
-const PLACE_ICONS = ["🥇", "🥈", "🥉", "4.", "5."];
+const PLACE_ICONS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
 
 /** Once the last free card is claimed, award medals, announce, and let the next season open. */
 async function checkSeasonEnd(guildId: string): Promise<void> {
@@ -247,8 +267,8 @@ const commands = [
     .addUserOption((o) => o.setName("member").setDescription("العضو (اختياري)")),
   new SlashCommandBuilder()
     .setName("card")
-    .setDescription("ابحث عن كرت بالاسم")
-    .addStringOption((o) => o.setName("name").setDescription("اسم الكرت أو جزء منه").setRequired(true)),
+    .setDescription("ابحث عن كرت بالرقم أو الاسم")
+    .addStringOption((o) => o.setName("name").setDescription("رقم الكرت أو اسمه").setRequired(true)),
   new SlashCommandBuilder()
     .setName("top")
     .setDescription("متصدرو الموسم")
@@ -257,18 +277,18 @@ const commands = [
   new SlashCommandBuilder()
     .setName("divorce")
     .setDescription("تخلَّ عن كرت من مجموعتك")
-    .addStringOption((o) => o.setName("name").setDescription("اسم الكرت").setRequired(true)),
+    .addStringOption((o) => o.setName("name").setDescription("رقم الكرت أو اسمه").setRequired(true)),
   new SlashCommandBuilder()
     .setName("gift")
     .setDescription("اهدِ كرت لعضو")
     .addUserOption((o) => o.setName("member").setDescription("المستلم").setRequired(true))
-    .addStringOption((o) => o.setName("name").setDescription("اسم الكرت").setRequired(true)),
+    .addStringOption((o) => o.setName("name").setDescription("رقم الكرت أو اسمه").setRequired(true)),
   new SlashCommandBuilder()
     .setName("exchange")
     .setDescription("اعرض تبادل كرت بكرت مع عضو")
     .addUserOption((o) => o.setName("member").setDescription("الطرف الآخر").setRequired(true))
-    .addStringOption((o) => o.setName("my_card").setDescription("كرتك الذي تعرضه").setRequired(true))
-    .addStringOption((o) => o.setName("their_card").setDescription("كرته الذي تريده").setRequired(true)),
+    .addStringOption((o) => o.setName("my_card").setDescription("رقم كرتك أو اسمه").setRequired(true))
+    .addStringOption((o) => o.setName("their_card").setDescription("رقم كرته أو اسمه").setRequired(true)),
   new SlashCommandBuilder()
     .setName("rescan")
     .setDescription("(إدارة) افحص الصور الجديدة في مجلد images")
@@ -341,18 +361,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 async function handleCommand(i: ChatInputCommandInteraction) {
-  if (!i.inGuild()) return void i.reply({ content: ar("هذا البوت يعمل داخل السيرفرات فقط"), ...Ephemeral });
+  if (!i.inGuild()) return void i.reply({ ...note("هذا البوت يعمل داخل السيرفرات فقط", COLOR.warn), ...Ephemeral });
   const gid = i.guildId, uid = i.user.id;
   if (i.channelId) db.setLastChannel(gid, i.channelId); // rush cards drop wherever the bot is being used
 
   switch (i.commandName) {
     case "roll": {
       const used = db.rollsToday(gid, uid);
-      if (used >= ROLLS_PER_DAY) return void i.reply({ content: ar(`⏳ خلصت رميّات اليوم. تتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`), ...Ephemeral });
+      if (used >= ROLLS_PER_DAY) return void i.reply({ ...note(`⏳ خلصت رميّات اليوم. تتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`, COLOR.warn), ...Ephemeral });
       const card = pickCard(gid);
       if (!card) {
         const any = Object.keys(db.poolCounts()).length > 0;
-        return void i.reply({ content: ar(any ? "كل الكروت مملوكة في هذا السيرفر. انتظر /divorce من أحد" : "ما في كروت بعد. حطّ صور في مجلد images وجرّب /rescan"), ...Ephemeral });
+        return void i.reply({ ...note(any ? "كل الكروت مملوكة في هذا السيرفر. انتظر /divorce من أحد" : "ما في كروت بعد. حطّ صور في مجلد images وجرّب /rescan", COLOR.warn), ...Ephemeral });
       }
       await i.deferReply(); // acknowledge within Discord's 3-second window
       db.recordRoll(gid, uid);
@@ -372,14 +392,14 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.deferReply();
       const user = i.options.getUser("member") ?? i.user;
       const view = collectionPage(gid, user, 0, Date.now() + COLLECTION_IDLE_SECONDS * 1000);
-      if (!view) return void i.editReply(ar(`${user.displayName} ما عنده كروت بعد`));
+      if (!view) return void i.editReply(note(`${user.displayName} ما عنده كروت بعد`));
       armIdle(await i.editReply(view.payload), view.idle);
       return;
     }
 
     case "card": {
       const c = db.findCard(i.options.getString("name", true));
-      if (!c) return void i.reply({ content: ar("ما لقيت كرت بهذا الاسم"), ...Ephemeral });
+      if (!c) return void i.reply({ ...note("ما لقيت كرت بهذا الرقم أو الاسم", COLOR.warn), ...Ephemeral });
       await i.deferReply();
       return void i.editReply({ embeds: [cardEmbed(c, db.ownerOf(gid, c.id))], files: cardFiles(c) });
     }
@@ -388,9 +408,9 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.deferReply();
       const live = db.currentSeason(gid);
       const season = i.options.getInteger("season") ?? live;
-      if (season > live) return void i.editReply(ar(`لا يوجد موسم ${season}. المواسم المتاحة من 1 إلى ${live}`));
+      if (season > live) return void i.editReply(note(`لا يوجد موسم ${season}. المواسم المتاحة من 1 إلى ${live}`, COLOR.warn));
       const board = db.seasonTop(gid, season);
-      if (!board.length) return void i.editReply(ar(`ما حد طلب شي في الموسم ${season}`));
+      if (!board.length) return void i.editReply(note(`ما حد طلب شي في الموسم ${season}`));
       const lines = board.map((r, n) => `${PLACE_ICONS[n] ?? `${n + 1}.`} <@${r.userId}> — ${r.points} نقطة · ${r.count} كرت`);
       const done = season < live;
       const embed = new EmbedBuilder()
@@ -406,9 +426,18 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const live = db.currentSeason(gid);
       const board = db.allTimeLeaderboard(gid);
       if (!board.length) {
-        return void i.editReply(
-          ar(`ما خلص ولا موسم بعد. نحن في الموسم ${live}، وأول خمسة عند نهايته ياخذون نقاط دائمة: 5 · 4 · 3 · 2 · 1`),
-        );
+        const left = Object.values(db.poolCounts(gid)).reduce((a, b) => a + (b ?? 0), 0);
+        const prizes = ["5 نقاط", "4 نقاط", "3 نقاط", "نقطتان", "نقطة واحدة"];
+        const empty = new EmbedBuilder()
+          .setTitle("🏆 الترتيب العام")
+          .setDescription("لم ينتهِ أي موسم بعد، فالجدول ما زال فارغاً.\nيمتلئ تلقائياً لحظة انتهاء الموسم.")
+          .setColor(COLOR.gold)
+          .addFields(
+            { name: "الجوائز الدائمة", value: PLACE_ICONS.map((icon, n) => `${icon} ${prizes[n]}`).join("\n"), inline: true },
+            { name: "متى ينتهي الموسم", value: `عندما يُطلب آخر كرت.\nباقي **${left}** كرت.`, inline: true },
+          )
+          .setFooter({ text: `الموسم ${live} جارٍ الآن · اكتب /top لترتيب هذا الموسم` });
+        return void i.editReply({ embeds: [arEmbed(empty)] });
       }
       const lines = board.map(
         (r, n) => `${PLACE_ICONS[n] ?? `${n + 1}.`} <@${r.userId}> — ${r.points} نقطة · ${r.seasons} موسم${r.golds ? ` · ${r.golds} 🥇` : ""}`,
@@ -423,30 +452,30 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
     case "divorce": {
       const c = db.findCard(i.options.getString("name", true));
-      if (!c || !db.release(gid, c.id, uid)) return void i.reply({ content: ar("هذا الكرت ليس في مجموعتك"), ...Ephemeral });
-      return void i.reply(ar(`💔 ${i.user} تخلّى عن **${c.name}**`));
+      if (!c || !db.release(gid, c.id, uid)) return void i.reply({ ...note("هذا الكرت ليس في مجموعتك", COLOR.warn), ...Ephemeral });
+      return void i.reply(note(`💔 ${i.user} تخلّى عن **${c.name}**`, COLOR.warn));
     }
 
     case "gift": {
       const target = i.options.getUser("member", true);
       const c = db.findCard(i.options.getString("name", true));
       if (!c || !db.transfer(gid, c.id, uid, target.id)) return void i.reply({ content: ar("هذا الكرت ليس في مجموعتك"), ...Ephemeral });
-      return void i.reply(ar(`🎁 ${i.user} أهدى **${c.name}** إلى ${target}`));
+      return void i.reply(note(`🎁 ${i.user} أهدى **${c.name}** إلى ${target}`, COLOR.ok));
     }
 
     case "exchange": {
       const target = i.options.getUser("member", true);
-      if (target.id === uid) return void i.reply({ content: ar("ما تقدر تتبادل مع نفسك"), ...Ephemeral });
+      if (target.id === uid) return void i.reply({ ...note("ما تقدر تتبادل مع نفسك", COLOR.warn), ...Ephemeral });
       const mine = db.findCard(i.options.getString("my_card", true));
       const theirs = db.findCard(i.options.getString("their_card", true));
-      if (!mine || db.ownerOf(gid, mine.id) !== uid) return void i.reply({ content: ar("الكرت الأول ليس في مجموعتك"), ...Ephemeral });
-      if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) return void i.reply({ content: ar(`الكرت الثاني ليس في مجموعة ${target.displayName}`), ...Ephemeral });
+      if (!mine || db.ownerOf(gid, mine.id) !== uid) return void i.reply({ ...note("الكرت الأول ليس في مجموعتك", COLOR.warn), ...Ephemeral });
+      if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${target.displayName}`, COLOR.warn), ...Ephemeral });
       const e = new EmbedBuilder()
         .setTitle("🤝 عرض تبادل")
         .setColor(0x3498db)
         .addFields(
-          { name: `${i.user.displayName} يعطي`, value: `${RARITIES[mine.rarity].emoji} ${mine.name}`, inline: true },
-          { name: `${target.displayName} يعطي`, value: `${RARITIES[theirs.rarity].emoji} ${theirs.name}`, inline: true },
+          { name: `${i.user.displayName} يعطي`, value: `${RARITIES[mine.rarity].emoji} ${mine.name} \`#${mine.id}\``, inline: true },
+          { name: `${target.displayName} يعطي`, value: `${RARITIES[theirs.rarity].emoji} ${theirs.name} \`#${theirs.id}\``, inline: true },
         )
         .setFooter({ text: "العرض صالح 5 دقائق" });
       const expiresAt = Date.now() + EXCHANGE_WINDOW_SECONDS * 1000;
@@ -454,16 +483,16 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       setTimeout(() => {
         // Still pending? Only then mark it expired (accept/decline already rewrote the message).
         if (db.ownerOf(gid, mine.id) === uid && db.ownerOf(gid, theirs.id) === target.id)
-          msg.resource?.message?.edit({ content: ar("⌛ انتهى وقت العرض"), embeds: [], components: [] }).catch(() => {});
+          msg.resource?.message?.edit({ content: "", ...note("⌛ انتهى وقت العرض", COLOR.warn), components: [] }).catch(() => {});
       }, EXCHANGE_WINDOW_SECONDS * 1000);
       return;
     }
 
     case "backup": {
-      if (!ownerIds.has(uid)) return void i.reply({ content: ar("هذا الأمر لصاحب البوت فقط"), ...Ephemeral });
+      if (!ownerIds.has(uid)) return void i.reply({ ...note("هذا الأمر لصاحب البوت فقط", COLOR.warn), ...Ephemeral });
       await i.deferReply(Ephemeral);
       const file = new AttachmentBuilder(Buffer.from(db.backupBytes()), { name: "haifa.db" });
-      return void i.editReply({ content: ar("نسخة قاعدة البيانات. احتفظ بها في مكان آمن."), files: [file] });
+      return void i.editReply({ ...note("نسخة قاعدة البيانات. احتفظ بها في مكان آمن.", COLOR.ok), files: [file] });
     }
 
     case "restore": {
@@ -471,15 +500,15 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.deferReply(Ephemeral);
       const att = i.options.getAttachment("file", true);
       const res = await fetch(att.url);
-      if (!res.ok) return void i.editReply(ar("ما قدرت أنزّل الملف"));
+      if (!res.ok) return void i.editReply(note("ما قدرت أنزّل الملف", COLOR.warn));
       try {
         db.replaceDatabase(new Uint8Array(await res.arrayBuffer()));
       } catch (e) {
-        return void i.editReply(ar(`الملف ليس قاعدة بيانات صالحة (${(e as Error).message})`));
+        return void i.editReply(note(`الملف ليس قاعدة بيانات صالحة (${(e as Error).message})`, COLOR.warn));
       }
       const pool = db.poolCounts();
       const total = Object.values(pool).reduce((a, b) => a + (b ?? 0), 0);
-      return void i.editReply(ar(`✅ تم الاستبدال. ${total} كرت في القاعدة الجديدة.`));
+      return void i.editReply(note(`✅ تم الاستبدال. ${total} كرت في القاعدة الجديدة.`, COLOR.ok));
     }
 
     case "rescan": {
@@ -488,7 +517,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const pool = db.poolCounts();
       const lines = [`✅ ${added.length} كرت جديد`, ...added.slice(0, 20).map((c) => `${RARITIES[c.rarity].emoji} ${c.name} — ${c.rarity}`)];
       lines.push("\nالمجموع: " + RARITY_ORDER.map((t) => `${RARITIES[t].emoji} ${pool[t] ?? 0}`).join(" · "));
-      return void i.editReply(ar(lines.join("\n")));
+      return void i.editReply(note(lines.join("\n"), COLOR.ok));
     }
   }
 }
@@ -502,23 +531,23 @@ async function handleButton(i: ButtonInteraction) {
     const cardId = Number(rest[0]), expiresAt = Number(rest[1]);
     const card = db.getCard(cardId);
     if (!card) return;
-    if (Date.now() > expiresAt) return void i.reply({ content: ar("⌛ انتهى وقت الطلب"), ...Ephemeral });
-    if (db.claimedToday(gid, uid)) return void i.reply({ content: ar(`⏳ استخدمت طلب اليوم. يتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`), ...Ephemeral });
-    if (!db.claim(gid, cardId, uid)) return void i.reply({ content: ar("💔 سبقك أحد إليها"), ...Ephemeral });
+    if (Date.now() > expiresAt) return void i.reply({ ...note("⌛ انتهى وقت الطلب", COLOR.warn), ...Ephemeral });
+    if (db.claimedToday(gid, uid)) return void i.reply({ ...note(`⏳ استخدمت طلب اليوم. يتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`, COLOR.warn), ...Ephemeral });
+    if (!db.claim(gid, cardId, uid)) return void i.reply({ ...note("💔 سبقك أحد إليها", COLOR.warn), ...Ephemeral });
     const footer = i.message.embeds[0]?.footer?.text;
     const embed = cardEmbed(card, uid);
     if (footer) embed.setFooter({ text: footer });
     await i.update({ embeds: [embed], components: [claimRow(cardId, expiresAt, true)] });
-    await i.followUp(ar(`💍 ${i.user} حصل على **${card.name}**!`));
+    await i.followUp(note(`💍 ${i.user} حصل على **${card.name}**!`, COLOR.ok));
     return void (await checkSeasonEnd(gid));
   }
 
   if (kind === "col") {
     const [userId, pageStr, expStr] = rest as [string, string, string];
-    if (Date.now() > Number(expStr)) return void i.reply({ content: ar("⌛ انتهت الجلسة. اكتب /collection من جديد"), ...Ephemeral });
+    if (Date.now() > Number(expStr)) return void i.reply({ ...note("⌛ انتهت الجلسة. اكتب /collection من جديد", COLOR.warn), ...Ephemeral });
     const user = await client.users.fetch(userId);
     const view = collectionPage(gid, user, Number(pageStr), Date.now() + COLLECTION_IDLE_SECONDS * 1000);
-    if (!view) return void i.update({ content: ar(`${user.displayName} ما عنده كروت بعد`), embeds: [], components: [] });
+    if (!view) return void i.update({ content: "", ...note(`${user.displayName} ما عنده كروت بعد`), components: [] });
     await i.update(view.payload);
     return void armIdle(i.message, view.idle);
   }
@@ -529,22 +558,22 @@ async function handleButton(i: ButtonInteraction) {
     // No expiry and no daily cost: the whole point of a rush card.
     if (!db.claimFree(gid, card.id, uid)) return void i.reply({ content: ar("💔 سبقك أحد إليها"), ...Ephemeral });
     await i.update({ embeds: [cardEmbed(card, uid)], components: [rushRow(card.id, true)] });
-    await i.followUp(ar(`⚡ ${i.user} خطف **${card.name}** مجاناً!`));
+    await i.followUp(note(`⚡ ${i.user} خطف **${card.name}** مجاناً!`, COLOR.ok));
     return void (await checkSeasonEnd(gid));
   }
 
   if (kind === "xchg") {
     const [action, offerer, target, mineId, theirsId, expiresAt] = rest as [string, string, string, string, string, string];
-    if (uid !== target) return void i.reply({ content: ar("هذا العرض ليس لك"), ...Ephemeral });
-    const finish = (content: string) => i.update({ content: ar(content), embeds: [], components: [] });
-    if (Date.now() > Number(expiresAt)) return void finish("⌛ انتهى وقت العرض");
-    if (action === "d") return void finish(`❌ <@${target}> رفض التبادل`);
+    if (uid !== target) return void i.reply({ ...note("هذا العرض ليس لك", COLOR.warn), ...Ephemeral });
+    const finish = (content: string, color: number = COLOR.ok) => i.update({ content: "", ...note(content, color), components: [] });
+    if (Date.now() > Number(expiresAt)) return void finish("⌛ انتهى وقت العرض", COLOR.warn);
+    if (action === "d") return void finish(`❌ <@${target}> رفض التبادل`, COLOR.warn);
     const mine = db.getCard(Number(mineId)), theirs = db.getCard(Number(theirsId));
     if (!mine || !theirs) return;
     try {
       db.swap(gid, mine.id, offerer, theirs.id, target);
     } catch {
-      return void finish("❌ تغيّرت الملكية، العرض لم يعد صالحاً");
+      return void finish("❌ تغيّرت الملكية، العرض لم يعد صالحاً", COLOR.warn);
     }
     return void finish(`🤝 تم التبادل! <@${offerer}> أخذ **${theirs.name}** و<@${target}> أخذ **${mine.name}**`);
   }

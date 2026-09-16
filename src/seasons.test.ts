@@ -82,3 +82,14 @@ test("a server where nobody played never closes a season", () => {
   expect(db.closeSeason(quiet)).toEqual([]);
   expect(db.currentSeason(quiet)).toBe(1);
 });
+
+test("cards can be found by number, with or without a #", () => {
+  const id = db.addCard("find.jpg", "كرت البحث", "نادرة", "d");
+  expect(db.findCard(String(id))?.id).toBe(id);
+  expect(db.findCard(`#${id}`)?.id).toBe(id);
+  expect(db.findCard(` ${id} `)?.id).toBe(id);
+  expect(db.findCard("كرت البحث")?.id).toBe(id);   // exact name still works
+  expect(db.findCard("البحث")?.id).toBe(id);       // partial name still works
+  expect(db.findCard("999999")).toBeNull();        // unknown number, not a crash
+  expect(db.findCard("لا يوجد")).toBeNull();
+});

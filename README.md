@@ -15,12 +15,12 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 |---|---|
 | `/roll` | Roll a random card. Unclaimed cards show a claim button for 30 seconds |
 | `/collection [member]` | Summary page plus one card per page with its photo. Prev / next buttons, greyed out after 2 idle minutes |
-| `/card <name>` | Look up a card and see who owns it |
+| `/card <id or name>` | Look up a card and see who owns it |
 | `/top [season]` | This season's standings. Pass a number to see a finished season |
 | `/leaderboard` | All-time table of season medals. Never resets |
-| `/divorce <name>` | Release a card you own |
-| `/gift <member> <name>` | Give a card away |
-| `/exchange <member> <my_card> <their_card>` | Propose a trade. The other member gets Accept / Decline buttons (5 min) |
+| `/divorce <id or name>` | Release a card you own |
+| `/gift <member> <id or name>` | Give a card away |
+| `/exchange <member> <my_card> <their_card>` | Propose a trade by id or name. The other member gets Accept / Decline buttons (5 min) |
 | `/rescan` | (Manage Server) register new photos in `images/` |
 | `/backup` | (bot owner) download the database file |
 | `/restore <file>` | (bot owner) replace the database with an uploaded `haifa.db` |
@@ -71,6 +71,9 @@ bun start
 On first start the bot registers the 500 seeded cards. Add more photos to `images/` later and run `/rescan`.
 
 Slash commands can take up to an hour to appear the first time. Kick the bot and re-invite it if they don't show.
+
+Every card has a **number** shown on its embed and next to its name in `/collection`.
+Anywhere a command asks for a card you can type the number instead of the Arabic name: `/card 42` or `/gift @someone 42`.
 
 ## Seasons
 

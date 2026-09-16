@@ -215,11 +215,16 @@ export function getCard(id: number): Card | null {
   return db.query<Card, [number]>("SELECT * FROM cards WHERE id = ?").get(id);
 }
 
-/** Exact name first, then substring match. */
+/** Card number first (names are awkward to type), then exact name, then substring. */
 export function findCard(query: string): Card | null {
+  const q = query.trim().replace(/^#/, "");
+  if (/^\d+$/.test(q)) {
+    const byId = getCard(Number(q));
+    if (byId) return byId;
+  }
   return (
-    db.query<Card, [string]>("SELECT * FROM cards WHERE name = ?").get(query) ??
-    db.query<Card, [string]>("SELECT * FROM cards WHERE name LIKE ? ORDER BY name LIMIT 1").get(`%${query}%`)
+    db.query<Card, [string]>("SELECT * FROM cards WHERE name = ?").get(q) ??
+    db.query<Card, [string]>("SELECT * FROM cards WHERE name LIKE ? ORDER BY name LIMIT 1").get(`%${q}%`)
   );
 }
 
