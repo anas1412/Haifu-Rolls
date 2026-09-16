@@ -178,16 +178,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * The coin is already flipped and the cards already awarded before any of this runs: the spin is
- * only theatre. Three frames alternate the spotlight between the two players, then the result lands.
+ * only theatre. It deliberately shows both players and favours neither, so no frame hints at the
+ * result. An earlier version landed the last frame on the winner and players read it as a tell.
  */
 const SPIN_FRAMES = 3;
-const spinBar = (frame: number) => "▰".repeat(frame + 1) + "▱".repeat(SPIN_FRAMES - frame);
+const spinBar = (frame: number) => "▰".repeat(frame + 1) + "▱".repeat(SPIN_FRAMES - frame - 1);
 
-function spinEmbed(frame: number, spotlight: string, stakes: string): EmbedBuilder {
+function spinEmbed(frame: number, challenger: string, target: string, stakes: string): EmbedBuilder {
   return new EmbedBuilder()
     .setAuthor({ name: ar("⚔️ التحدي") })
-    .setTitle(ar("🎲 القرعة تدور..."))
-    .setDescription(ar(`${spinBar(frame)}\n✨ **${spotlight}**`))
+    .setTitle(ar(`🎲 القرعة تدور${".".repeat(frame + 1)}`))
+    .setDescription(ar(`**${challenger}** ⚔️ **${target}**\n${spinBar(frame)}`))
     .setColor(COLOR.warn)
     .addFields({ name: ar("على المحك"), value: stakes });
 }
@@ -724,12 +725,11 @@ async function handleButton(i: ButtonInteraction) {
 
     // Spin first, reveal after. Every edit is best-effort: the cards are already awarded, so a
     // dropped frame costs nothing but a little drama.
-    // The spotlight alternates, then settles on the winner so the spin looks like it lands on them.
-    const spotlights = [challengerName, targetName, winnerName];
-    await i.update({ content: "", embeds: [arEmbed(spinEmbed(0, spotlights[0]!, stakes))], components: [] });
+    // Identical frames for both sides: nothing here can be read as a hint at the outcome.
+    await i.update({ content: "", embeds: [arEmbed(spinEmbed(0, challengerName, targetName, stakes))], components: [] });
     for (let frame = 1; frame < SPIN_FRAMES; frame++) {
       await sleep(DUEL_SUSPENSE_MS);
-      await i.editReply({ embeds: [arEmbed(spinEmbed(frame, spotlights[frame]!, stakes))] }).catch(() => {});
+      await i.editReply({ embeds: [arEmbed(spinEmbed(frame, challengerName, targetName, stakes))] }).catch(() => {});
     }
     await sleep(DUEL_SUSPENSE_MS);
 

@@ -89,9 +89,9 @@ straight **50/50 coin flip** decides it. The winner takes both cards.
   rarity and points before they decide, so consent is the safeguard rather than a rarity rule.
 - Ownership is re-checked at the moment of the flip. If either card moved while the offer was open the duel is
   cancelled and nothing changes.
-- On accept the message spins for a few seconds, alternating the spotlight before settling on the
-  winner, then reveals the result. The outcome is decided and the cards awarded **before** the spin,
-  so a dropped frame or a restart never changes who won.
+- On accept the message spins for a few seconds, then reveals the result. Every spin frame is
+  identical for both players, so nothing in it hints at the outcome. The winner is decided and the
+  cards awarded **before** the spin, so a dropped frame or a restart never changes who won.
 - No daily cap: the other side has to agree to every duel, so consent is the throttle.
 - Tune it with `DUEL_WINDOW_SECONDS` and `DUEL_SUSPENSE_MS` (set to 0 for an instant reveal) in `config.ts`.
 
