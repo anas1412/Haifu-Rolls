@@ -119,6 +119,20 @@ export function pickCard(guildId: string, minRarity?: db.Card["rarity"]): db.Car
   return cards[Math.floor(Math.random() * cards.length)] ?? null;
 }
 
+/**
+ * People recognise each other by their server nickname, not their global Discord name.
+ * User.displayName is the global one, so prefer the guild member whenever we have it.
+ */
+type MemberLike = { displayName?: string; nick?: string | null } | null;
+const memberName = (member: MemberLike, fallback: User): string => member?.displayName ?? member?.nick ?? fallback.displayName;
+
+/** Nickname of whoever ran the command. */
+const callerName = (i: ChatInputCommandInteraction): string => memberName(i.member as MemberLike, i.user);
+
+/** Nickname of a user passed in a command option. */
+const optionName = (i: ChatInputCommandInteraction, option: string, user: User): string =>
+  memberName(i.options.getMember(option) as MemberLike, user);
+
 function fmtWait(seconds: number): string {
   const m = Math.floor(seconds / 60);
   return m >= 60 ? `${Math.floor(m / 60)} س ${m % 60} د` : `${m} د`;
@@ -411,7 +425,8 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
     case "collection": {
       await i.deferReply();
-      const user = i.options.getUser("member") ?? i.user;
+      const picked = i.options.getUser("member");
+      const user = { id: (picked ?? i.user).id, displayName: picked ? optionName(i, "member", picked) : callerName(i) };
       const view = collectionPage(gid, user, 0, Date.now() + COLLECTION_IDLE_SECONDS * 1000);
       if (!view) return void i.editReply(note(`${user.displayName} ما عنده كروت بعد`));
       armIdle(await i.editReply(view.payload), view.idle);
@@ -490,13 +505,13 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const mine = db.findCard(i.options.getString("my_card", true));
       const theirs = db.findCard(i.options.getString("their_card", true));
       if (!mine || db.ownerOf(gid, mine.id) !== uid) return void i.reply({ ...note("الكرت الأول ليس في مجموعتك", COLOR.warn), ...Ephemeral });
-      if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${target.displayName}`, COLOR.warn), ...Ephemeral });
+      if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${optionName(i, "member", target)}`, COLOR.warn), ...Ephemeral });
       const e = new EmbedBuilder()
         .setTitle("🤝 عرض تبادل")
         .setColor(0x3498db)
         .addFields(
-          { name: `${i.user.displayName} يعطي`, value: `${RARITIES[mine.rarity].emoji} ${mine.name} \`#${mine.id}\``, inline: true },
-          { name: `${target.displayName} يعطي`, value: `${RARITIES[theirs.rarity].emoji} ${theirs.name} \`#${theirs.id}\``, inline: true },
+          { name: `${callerName(i)} يعطي`, value: `${RARITIES[mine.rarity].emoji} ${mine.name} \`#${mine.id}\``, inline: true },
+          { name: `${optionName(i, "member", target)} يعطي`, value: `${RARITIES[theirs.rarity].emoji} ${theirs.name} \`#${theirs.id}\``, inline: true },
         )
         .setFooter({ text: "العرض صالح 5 دقائق" });
       const expiresAt = Date.now() + EXCHANGE_WINDOW_SECONDS * 1000;
@@ -547,18 +562,18 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const theirs = db.findCard(i.options.getString("their_card", true));
       if (!mine || db.ownerOf(gid, mine.id) !== uid) return void i.reply({ ...note("الكرت الأول ليس في مجموعتك", COLOR.warn), ...Ephemeral });
       if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) {
-        return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${target.displayName}`, COLOR.warn), ...Ephemeral });
+        return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${optionName(i, "member", target)}`, COLOR.warn), ...Ephemeral });
       }
       db.recordDuel(gid, uid);
       const expiresAt = Date.now() + DUEL_WINDOW_SECONDS * 1000;
       const embed = new EmbedBuilder()
         .setAuthor({ name: ar("⚔️ تحدٍ") })
-        .setTitle(ar(`${i.user.displayName} ضد ${target.displayName}`))
+        .setTitle(ar(`${callerName(i)} ضد ${optionName(i, "member", target)}`))
         .setDescription(ar(`الفائز يأخذ الكرتين. القرعة عادلة: ${50}/${50}`))
         .setColor(COLOR.warn)
         .addFields(
-          { name: `${i.user.displayName} يراهن بـ`, value: stakeLine(mine), inline: true },
-          { name: `${target.displayName} يراهن بـ`, value: stakeLine(theirs), inline: true },
+          { name: `${callerName(i)} يراهن بـ`, value: stakeLine(mine), inline: true },
+          { name: `${optionName(i, "member", target)} يراهن بـ`, value: stakeLine(theirs), inline: true },
         )
         .setFooter({ text: `متبقي ${DUELS_PER_DAY - used - 1} تحدٍ لك اليوم · العرض صالح 5 دقائق` });
       const msg = await i.reply({
@@ -612,7 +627,8 @@ async function handleButton(i: ButtonInteraction) {
   if (kind === "col") {
     const [userId, pageStr, expStr] = rest as [string, string, string];
     if (Date.now() > Number(expStr)) return void i.reply({ ...note("⌛ انتهت الجلسة. اكتب /collection من جديد", COLOR.warn), ...Ephemeral });
-    const user = await client.users.fetch(userId);
+    const member = await i.guild?.members.fetch(userId).catch(() => null);
+    const user = member ?? (await client.users.fetch(userId));
     const view = collectionPage(gid, user, Number(pageStr), Date.now() + COLLECTION_IDLE_SECONDS * 1000);
     if (!view) return void i.update({ content: "", ...note(`${user.displayName} ما عنده كروت بعد`), components: [] });
     await i.update(view.payload);
@@ -645,10 +661,14 @@ async function handleButton(i: ButtonInteraction) {
     } catch {
       return void close("❌ تغيّرت الملكية، التحدي لم يعد صالحاً", COLOR.warn);
     }
+    // Discord renders mentions in descriptions and fields, but never in a title: use a plain name there.
+    const loser = challengerWins ? target : challenger;
+    const nameOf = async (id: string) => (await i.guild?.members.fetch(id).catch(() => null))?.displayName ?? "لاعب";
+    const [winnerName, loserName] = await Promise.all([nameOf(winner), nameOf(loser)]);
     const result = new EmbedBuilder()
       .setAuthor({ name: ar("⚔️ نتيجة التحدي") })
-      .setTitle(ar(`🎉 فاز <@${winner}>`))
-      .setDescription(ar(`<@${winner}> أخذ الكرتين. <@${challengerWins ? target : challenger}> خسر رهانه.`))
+      .setTitle(ar(`🎉 فاز ${winnerName}`))
+      .setDescription(ar(`<@${winner}> أخذ الكرتين، و<@${loser}> خسر رهانه.\nحظ أوفر يا ${loserName}.`))
       .setColor(COLOR.gold)
       .addFields(
         { name: ar("الغنيمة"), value: `${stakeLine(mine)}\n\n${stakeLine(theirs)}` },

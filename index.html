@@ -109,11 +109,21 @@
   #rarity:has(.t-common:hover)  .rolls i:not(.c){opacity:.12}
 
   /* rules */
-  .rules{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .rules{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
   .rule{display:flex;flex-direction:column;gap:6px;padding:24px 22px 22px;border-radius:var(--radius);
     background:linear-gradient(160deg,rgba(217,164,65,.14),rgba(217,164,65,.03));border:1px solid rgba(217,164,65,.3)}
   .rule .big{font-family:var(--display);font-size:56px;line-height:1;color:var(--gold)}
   .rule p{margin:0;font-size:15px;line-height:1.6}
+
+  /* what makes it a game */
+  .feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .feat{padding:26px 24px;border-radius:var(--radius);background:rgba(0,0,0,.28);border:1px solid var(--panel-line);
+    transition:border-color .25s ease,transform .25s ease}
+  .feat:hover{border-color:var(--gold-line);transform:translateY(-4px)}
+  .feat .ficon{font-size:34px;line-height:1;margin-bottom:14px}
+  .feat h3{margin:0 0 8px;font-family:var(--display);font-weight:400;font-size:26px;color:var(--gold-soft)}
+  .feat p{margin:0;font-size:15px;line-height:1.7;color:var(--ivory-dim)}
+  .feat b{color:var(--ivory);font-weight:600}
 
   /* commands */
   .cmds{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
@@ -136,6 +146,7 @@
     .t .pct{font-size:36px}
     .rolls{grid-template-columns:repeat(10,1fr)}
     .rules{grid-template-columns:repeat(2,1fr)}
+    .feats{grid-template-columns:1fr}
     .cmds{grid-template-columns:1fr}
   }
   @media (max-width:480px){
@@ -200,24 +211,51 @@
   <div class="rules">
     <div class="rule"><div class="big">3</div><p>رميّات في اليوم لكل لاعب</p></div>
     <div class="rule"><div class="big">1</div><p>طلب في اليوم. اختر كرتك جيداً</p></div>
+    <div class="rule"><div class="big">3</div><p>تحديات في اليوم تقدر تبدأها</p></div>
     <div class="rule"><div class="big">30</div><p>ثانية يبقى فيها زر الطلب بعد الرمي. الأسرع يفوز</p></div>
     <div class="rule"><div class="big">5</div><p>دقائق أمام الطرف الآخر لقبول عرض التبادل أو رفضه</p></div>
+  </div>
+</section>
+
+<section class="wrap" id="play">
+  <div class="head">
+    <h2>أكثر من مجرد جمع</h2>
+    <p class="sub">ثلاث طرق تخليك تلحق المتصدرين حتى لو بدأت متأخراً.</p>
+  </div>
+  <div class="feats">
+    <div class="feat">
+      <div class="ficon">⚡</div>
+      <h3>الدروب</h3>
+      <p>كل بضع ساعات يسقط كرت في القناة، نادر أو أفضل. أول من يضغط يربحه <b>مجاناً</b>، ولا يستهلك طلبك اليومي.</p>
+    </div>
+    <div class="feat">
+      <div class="ficon">⚔️</div>
+      <h3>التحدي</h3>
+      <p>راهن بكرت مقابل كرت أي عضو. لازم يوافق، وبعدها <b>قرعة عادلة</b> تقرر. الفائز يأخذ الاثنين.</p>
+    </div>
+    <div class="feat">
+      <div class="ficon">🏆</div>
+      <h3>المواسم</h3>
+      <p>الموسم ينتهي لما يُطلب آخر كرت. أول خمسة يأخذون نقاطاً <b>دائمة</b>، وتبدأ جولة جديدة وكل الكروت متاحة.</p>
+    </div>
   </div>
 </section>
 
 <section class="wrap" id="commands">
   <div class="head">
     <h2>الأوامر</h2>
-    <p class="sub">كلها أوامر مائلة. اكتب <code class="inline">/</code> في ديسكورد وستظهر.</p>
+    <p class="sub">كلها أوامر مائلة. اكتب <code class="inline">/</code> في ديسكورد وستظهر. كل كرت له رقم، تقدر تكتبه بدل الاسم.</p>
   </div>
   <div class="cmds">
     <div class="cmd"><code>/roll</code><p>ارمِ كرتاً عشوائياً. إن كان متاحاً يظهر زر لطلبه.</p></div>
     <div class="cmd"><code>/collection [member]</code><p>مجموعتك أو مجموعة عضو، مرتبة حسب الندرة مع النقاط.</p></div>
-    <div class="cmd"><code>/card &lt;name&gt;</code><p>ابحث عن كرت بالاسم وشاهد من يملكه.</p></div>
-    <div class="cmd"><code>/top</code><p>قائمة المتصدرين في السيرفر.</p></div>
-    <div class="cmd"><code>/gift &lt;member&gt; &lt;name&gt;</code><p>اهدِ كرتاً من مجموعتك.</p></div>
-    <div class="cmd"><code>/exchange &lt;member&gt; &lt;my_card&gt; &lt;their_card&gt;</code><p>اعرض تبادل كرت بكرت. الطرف الآخر يقبل أو يرفض.</p></div>
-    <div class="cmd"><code>/divorce &lt;name&gt;</code><p>تخلَّ عن كرت ليعود متاحاً للجميع.</p></div>
+    <div class="cmd"><code>/card &lt;رقم أو اسم&gt;</code><p>ابحث عن كرت وشاهد من يملكه.</p></div>
+    <div class="cmd"><code>/top [season]</code><p>متصدرو الموسم الحالي. اكتب رقم موسم لترى نتيجته النهائية.</p></div>
+    <div class="cmd"><code>/leaderboard</code><p>الترتيب العام عبر كل المواسم. لا يُصفَّر أبداً.</p></div>
+    <div class="cmd"><code>/duel &lt;member&gt; &lt;كرتك&gt; &lt;كرته&gt;</code><p>راهن بكرت مقابل كرت. الفائز يأخذ الاثنين.</p></div>
+    <div class="cmd"><code>/gift &lt;member&gt; &lt;رقم أو اسم&gt;</code><p>اهدِ كرتاً من مجموعتك.</p></div>
+    <div class="cmd"><code>/exchange &lt;member&gt; &lt;كرتك&gt; &lt;كرته&gt;</code><p>اعرض تبادل كرت بكرت. الطرف الآخر يقبل أو يرفض.</p></div>
+    <div class="cmd"><code>/divorce &lt;رقم أو اسم&gt;</code><p>تخلَّ عن كرت ليعود متاحاً للجميع.</p></div>
     <div class="cmd"><code>/rescan</code><p>للإدارة: سجّل الصور الجديدة في مجلد images.</p></div>
   </div>
 </section>
