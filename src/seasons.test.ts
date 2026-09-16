@@ -93,3 +93,47 @@ test("cards can be found by number, with or without a #", () => {
   expect(db.findCard("999999")).toBeNull();        // unknown number, not a crash
   expect(db.findCard("لا يوجد")).toBeNull();
 });
+
+// ---------- duels ----------
+
+const D = "7777777777777777777"; // its own guild, so season state above cannot interfere
+
+test("a duel hands both staked cards to the winner", () => {
+  const a = db.addCard("d1.jpg", "د1", "نادرة", "d"), b = db.addCard("d2.jpg", "د2", "أسطورية", "d");
+  db.claimFree(D, a, A);
+  db.claimFree(D, b, B);
+
+  db.awardDuel(D, a, A, b, B, B); // B wins
+  expect(db.ownerOf(D, a)).toBe(B);
+  expect(db.ownerOf(D, b)).toBe(B);
+});
+
+test("the challenger winning keeps their own card and takes the other", () => {
+  const a = db.addCard("d3.jpg", "د3", "نادرة", "d"), b = db.addCard("d4.jpg", "د4", "مميزة", "d");
+  db.claimFree(D, a, A);
+  db.claimFree(D, b, B);
+
+  db.awardDuel(D, a, A, b, B, A); // A wins: card a is "moved" to its existing owner
+  expect(db.ownerOf(D, a)).toBe(A);
+  expect(db.ownerOf(D, b)).toBe(A);
+});
+
+test("a duel whose stake moved first is rejected and changes nothing", () => {
+  const a = db.addCard("d5.jpg", "د5", "نادرة", "d"), b = db.addCard("d6.jpg", "د6", "مميزة", "d");
+  db.claimFree(D, a, A);
+  db.claimFree(D, b, B);
+  db.transfer(D, b, B, C); // B gifts the stake away while the offer is open
+
+  expect(() => db.awardDuel(D, a, A, b, B, A)).toThrow();
+  expect(db.ownerOf(D, a)).toBe(A); // rolled back, A did not lose or gain anything
+  expect(db.ownerOf(D, b)).toBe(C);
+});
+
+test("duels started are capped per day", () => {
+  const fresh = "8888888888888888888";
+  expect(db.duelsToday(fresh, A)).toBe(0);
+  db.recordDuel(fresh, A);
+  db.recordDuel(fresh, A);
+  expect(db.duelsToday(fresh, A)).toBe(2);
+  expect(db.duelsToday(fresh, B)).toBe(0); // per player, not per server
+});

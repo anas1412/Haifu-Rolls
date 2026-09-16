@@ -21,6 +21,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/divorce <id or name>` | Release a card you own |
 | `/gift <member> <id or name>` | Give a card away |
 | `/exchange <member> <my_card> <their_card>` | Propose a trade by id or name. The other member gets Accept / Decline buttons (5 min) |
+| `/duel <member> <my_card> <their_card>` | Stake a card against theirs. A coin flip decides, winner takes both. 3 per day |
 | `/rescan` | (Manage Server) register new photos in `images/` |
 | `/backup` | (bot owner) download the database file |
 | `/restore <file>` | (bot owner) replace the database with an uploaded `haifa.db` |
@@ -74,6 +75,18 @@ Slash commands can take up to an hour to appear the first time. Kick the bot and
 
 Every card has a **number** shown on its embed and next to its name in `/collection`.
 Anywhere a command asks for a card you can type the number instead of the Arabic name: `/card 42` or `/gift @someone 42`.
+
+## Duels
+
+`/duel` stakes one of your cards against someone else's. They get Accept / Decline buttons, and on accept a
+straight **50/50 coin flip** decides it. The winner takes both cards.
+
+- Stakes are **free**: any card against any card. The defender has to accept, and both cards are shown with
+  rarity and points before they decide, so consent is the safeguard rather than a rarity rule.
+- **3 duels started per person per day**, reset at midnight. Accepting someone else's duel costs nothing.
+- Ownership is re-checked at the moment of the flip. If either card moved while the offer was open the duel is
+  cancelled and nothing changes.
+- Tune it with `DUELS_PER_DAY` and `DUEL_WINDOW_SECONDS` in `config.ts`.
 
 ## Seasons
 

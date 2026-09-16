@@ -72,6 +72,11 @@ export function init(): void {
       claimed_at REAL NOT NULL,
       PRIMARY KEY (guild_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS duels (
+      guild_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      started_at REAL NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS guild_channel (
       guild_id INTEGER PRIMARY KEY,
       channel_id INTEGER NOT NULL
@@ -347,6 +352,31 @@ export function rollsToday(guildId: string, userId: string): number {
 export function recordRoll(guildId: string, userId: string): void {
   db.query("INSERT INTO rolls (guild_id, user_id, rolled_at) VALUES (?, ?, ?)").run(guildId, userId, now());
   db.query("DELETE FROM rolls WHERE rolled_at < ?").run(dayStart());
+}
+
+export function duelsToday(guildId: string, userId: string): number {
+  return db
+    .query<{ n: number }, [string, string, number]>("SELECT COUNT(*) AS n FROM duels WHERE guild_id = ? AND user_id = ? AND started_at >= ?")
+    .get(guildId, userId, dayStart())!.n;
+}
+
+export function recordDuel(guildId: string, userId: string): void {
+  db.query("INSERT INTO duels (guild_id, user_id, started_at) VALUES (?, ?, ?)").run(guildId, userId, now());
+  db.query("DELETE FROM duels WHERE started_at < ?").run(dayStart());
+}
+
+/**
+ * Hand both staked cards to the winner, all or nothing.
+ * Throws if either card changed hands while the offer was open, so nothing is ever duplicated.
+ */
+export function awardDuel(guildId: string, cardA: number, userA: string, cardB: number, userB: string, winner: string): void {
+  const season = currentSeason(guildId);
+  db.transaction(() => {
+    const q = db.query("UPDATE claims SET user_id = ? WHERE guild_id = ? AND season = ? AND card_id = ? AND user_id = ?");
+    const a = q.run(winner, guildId, season, cardA, userA).changes;
+    const b = q.run(winner, guildId, season, cardB, userB).changes;
+    if (a !== 1 || b !== 1) throw new Error("ownership changed"); // rolls back
+  })();
 }
 
 export function claimedToday(guildId: string, userId: string): boolean {

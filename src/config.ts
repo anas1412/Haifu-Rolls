@@ -29,6 +29,11 @@ export const RUSH_MIN_HOURS = 2;   // shortest wait between drops
 export const RUSH_MAX_HOURS = 6;   // longest wait between drops
 export const RUSH_MIN_RARITY: Rarity = "نادرة"; // drops are never worse than this
 
+// Duel: stake one of your cards against someone else's. A coin flip decides; winner takes both.
+// Stakes are free on purpose, so a newcomer can win big. The defender has to accept, which is the safeguard.
+export const DUELS_PER_DAY = 3;          // duels each player may start per day
+export const DUEL_WINDOW_SECONDS = 300;  // how long the other side has to answer
+
 export const IMAGES_DIR = "images";
 // Optional: serve card images from a public URL instead of uploading them as attachments.
 // Leave empty ("") to upload attachments. Only works with a PUBLIC repo.

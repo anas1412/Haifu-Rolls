@@ -27,6 +27,8 @@ import { scanNewImages } from "./scanner";
 import {
   CLAIM_WINDOW_SECONDS,
   COLLECTION_IDLE_SECONDS,
+  DUEL_WINDOW_SECONDS,
+  DUELS_PER_DAY,
   EXCHANGE_WINDOW_SECONDS,
   IMAGE_BASE_URL,
   IMAGES_DIR,
@@ -136,6 +138,17 @@ function exchangeRow(offerer: string, target: string, mine: number, theirs: numb
   );
 }
 
+function duelRow(challenger: string, target: string, mine: number, theirs: number, expiresAt: number, disabled = false) {
+  const tail = `${challenger}:${target}:${mine}:${theirs}:${expiresAt}`;
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`duel:a:${tail}`).setLabel("قبول التحدي ⚔️").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(`duel:d:${tail}`).setLabel("رفض").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+  );
+}
+
+/** One line describing a staked card: rarity, name, number and what it is worth. */
+const stakeLine = (c: db.Card) => `${RARITIES[c.rarity].emoji} ${c.name}\n\`#${c.id}\` · ${RARITIES[c.rarity].points} نقطة`;
+
 // ---------- /collection browsing ----------
 
 const byRarityDesc = (a: db.Card, b: db.Card) =>
@@ -218,8 +231,10 @@ async function dropRush(guildId: string): Promise<void> {
     if (channelId && card) {
       const channel = await client.channels.fetch(channelId);
       if (channel?.isSendable()) {
-        const embed = cardEmbed(card).setFooter({ text: ar("كرت طائر · مجاني · أول من يضغط يربحه") });
-        await channel.send({ content: ar("⚡ **كرت طائر!** أول واحد يضغط ياخذه مجاناً"), embeds: [embed], components: [rushRow(card.id)], files: cardFiles(card) });
+        const embed = cardEmbed(card)
+          .setAuthor({ name: ar("⚡ كرت طائر") })
+          .setFooter({ text: ar("مجاني · لا يستهلك طلبك اليومي · أول من يضغط يربحه") });
+        await channel.send({ embeds: [embed], components: [rushRow(card.id)], files: cardFiles(card) });
         console.log(`rush drop in ${guildId}: ${card.name} [${card.rarity}]`);
       }
     }
@@ -251,7 +266,7 @@ async function checkSeasonEnd(guildId: string): Promise<void> {
       .setDescription(lines.join("\n"))
       .setColor(0xf1c40f)
       .setFooter({ text: `الموسم ${season + 1} بدأ · كل الكروت متاحة من جديد · /leaderboard للترتيب العام` });
-    await channel.send({ content: ar("🏁 **خلصت الكروت!** انتهى الموسم"), embeds: [arEmbed(embed)] });
+    await channel.send({ embeds: [arEmbed(embed.setAuthor({ name: ar("خلصت الكروت") }))] });
   } catch (err) {
     console.error(`season ${season} announcement failed for ${guildId}:`, err);
   }
@@ -287,6 +302,12 @@ const commands = [
     .setName("exchange")
     .setDescription("اعرض تبادل كرت بكرت مع عضو")
     .addUserOption((o) => o.setName("member").setDescription("الطرف الآخر").setRequired(true))
+    .addStringOption((o) => o.setName("my_card").setDescription("رقم كرتك أو اسمه").setRequired(true))
+    .addStringOption((o) => o.setName("their_card").setDescription("رقم كرته أو اسمه").setRequired(true)),
+  new SlashCommandBuilder()
+    .setName("duel")
+    .setDescription("تحدَّ عضواً: كرتك مقابل كرته، والفائز يأخذ الاثنين")
+    .addUserOption((o) => o.setName("member").setDescription("الخصم").setRequired(true))
     .addStringOption((o) => o.setName("my_card").setDescription("رقم كرتك أو اسمه").setRequired(true))
     .addStringOption((o) => o.setName("their_card").setDescription("رقم كرته أو اسمه").setRequired(true)),
   new SlashCommandBuilder()
@@ -511,6 +532,52 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       return void i.editReply(note(`✅ تم الاستبدال. ${total} كرت في القاعدة الجديدة.`, COLOR.ok));
     }
 
+    case "duel": {
+      const target = i.options.getUser("member", true);
+      if (target.id === uid) return void i.reply({ ...note("ما تقدر تتحدى نفسك", COLOR.warn), ...Ephemeral });
+      if (target.bot) return void i.reply({ ...note("ما تقدر تتحدى بوت", COLOR.warn), ...Ephemeral });
+      const used = db.duelsToday(gid, uid);
+      if (used >= DUELS_PER_DAY) {
+        return void i.reply({
+          ...note(`⏳ خلصت تحدياتك اليوم. تتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`, COLOR.warn),
+          ...Ephemeral,
+        });
+      }
+      const mine = db.findCard(i.options.getString("my_card", true));
+      const theirs = db.findCard(i.options.getString("their_card", true));
+      if (!mine || db.ownerOf(gid, mine.id) !== uid) return void i.reply({ ...note("الكرت الأول ليس في مجموعتك", COLOR.warn), ...Ephemeral });
+      if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) {
+        return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${target.displayName}`, COLOR.warn), ...Ephemeral });
+      }
+      db.recordDuel(gid, uid);
+      const expiresAt = Date.now() + DUEL_WINDOW_SECONDS * 1000;
+      const embed = new EmbedBuilder()
+        .setAuthor({ name: ar("⚔️ تحدٍ") })
+        .setTitle(ar(`${i.user.displayName} ضد ${target.displayName}`))
+        .setDescription(ar(`الفائز يأخذ الكرتين. القرعة عادلة: ${50}/${50}`))
+        .setColor(COLOR.warn)
+        .addFields(
+          { name: `${i.user.displayName} يراهن بـ`, value: stakeLine(mine), inline: true },
+          { name: `${target.displayName} يراهن بـ`, value: stakeLine(theirs), inline: true },
+        )
+        .setFooter({ text: `متبقي ${DUELS_PER_DAY - used - 1} تحدٍ لك اليوم · العرض صالح 5 دقائق` });
+      const msg = await i.reply({
+        content: `${target}`,
+        embeds: [arEmbed(embed)],
+        components: [duelRow(uid, target.id, mine.id, theirs.id, expiresAt)],
+        withResponse: true,
+      });
+      setTimeout(() => {
+        // Still pending only if neither card has moved; otherwise the duel already resolved.
+        if (db.ownerOf(gid, mine.id) === uid && db.ownerOf(gid, theirs.id) === target.id) {
+          msg.resource?.message
+            ?.edit({ content: "", ...note("⌛ انتهى وقت التحدي", COLOR.warn), components: [] })
+            .catch(() => {});
+        }
+      }, DUEL_WINDOW_SECONDS * 1000);
+      return;
+    }
+
     case "rescan": {
       await i.deferReply(Ephemeral);
       const added = await scanNewImages();
@@ -560,6 +627,33 @@ async function handleButton(i: ButtonInteraction) {
     await i.update({ embeds: [cardEmbed(card, uid)], components: [rushRow(card.id, true)] });
     await i.followUp(note(`⚡ ${i.user} خطف **${card.name}** مجاناً!`, COLOR.ok));
     return void (await checkSeasonEnd(gid));
+  }
+
+  if (kind === "duel") {
+    const [action, challenger, target, aStr, bStr, expStr] = rest as [string, string, string, string, string, string];
+    if (uid !== target) return void i.reply({ ...note("هذا التحدي ليس لك", COLOR.warn), ...Ephemeral });
+    const close = (text: string, color: number) => i.update({ content: "", ...note(text, color), components: [] });
+    if (Date.now() > Number(expStr)) return void close("⌛ انتهى وقت التحدي", COLOR.warn);
+    if (action === "d") return void close(`❌ <@${target}> رفض التحدي`, COLOR.warn);
+
+    const mine = db.getCard(Number(aStr)), theirs = db.getCard(Number(bStr));
+    if (!mine || !theirs) return;
+    const challengerWins = Math.random() < 0.5;
+    const winner = challengerWins ? challenger : target;
+    try {
+      db.awardDuel(gid, mine.id, challenger, theirs.id, target, winner);
+    } catch {
+      return void close("❌ تغيّرت الملكية، التحدي لم يعد صالحاً", COLOR.warn);
+    }
+    const result = new EmbedBuilder()
+      .setAuthor({ name: ar("⚔️ نتيجة التحدي") })
+      .setTitle(ar(`🎉 فاز <@${winner}>`))
+      .setDescription(ar(`<@${winner}> أخذ الكرتين. <@${challengerWins ? target : challenger}> خسر رهانه.`))
+      .setColor(COLOR.gold)
+      .addFields(
+        { name: ar("الغنيمة"), value: `${stakeLine(mine)}\n\n${stakeLine(theirs)}` },
+      );
+    return void i.update({ content: "", embeds: [arEmbed(result)], components: [duelRow(challenger, target, mine.id, theirs.id, 0, true)] });
   }
 
   if (kind === "xchg") {
