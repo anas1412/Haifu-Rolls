@@ -574,15 +574,15 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const claimed = rows.reduce((n, r) => n + r.claimed, 0);
       const embed = new EmbedBuilder()
         .setTitle("🎴 الكروت")
-        .setDescription(`متاحة **${total - claimed}** كرت · مملوكة **${claimed}** من **${total}**`)
+        .setDescription(`**${total - claimed}** متاح · **${claimed}** مملوك · **${total}** الإجمالي`)
         .setColor(COLOR.info)
-        .setFooter({ text: `الموسم ${db.currentSeason(gid)} · ينتهي عندما تُطلب آخر كرت` });
+        .setFooter({ text: `الموسم ${db.currentSeason(gid)} · ينتهي عندما يُطلب آخر كرت` });
       for (const tier of [...RARITY_ORDER].reverse()) {
         const r = by.get(tier);
         if (!r || SECRET_RARITIES.includes(tier)) continue; // counted in the totals, just not named
         embed.addFields({
           name: `${RARITIES[tier].emoji} ${tier}`,
-          value: `متاحة ${r.total - r.claimed} من ${r.total}`,
+          value: `**${r.total - r.claimed}** متاح من **${r.total}**`,
           inline: true,
         });
       }
