@@ -444,16 +444,18 @@ export function deckBreakdown(guildId: string): { rarity: Rarity; total: number;
 }
 
 /**
- * Hand both staked cards to the winner, all or nothing.
- * Throws if either card changed hands while the offer was open, so nothing is ever duplicated.
+ * Hand every staked card to the winner, all or nothing.
+ * Throws if any card changed hands while the offer was open, so nothing is ever duplicated.
  */
-export function awardDuel(guildId: string, cardA: number, userA: string, cardB: number, userB: string, winner: string): void {
+export function awardDuel(guildId: string, cardsA: number[], userA: string, cardsB: number[], userB: string, winner: string): void {
   const season = currentSeason(guildId);
   db.transaction(() => {
     const q = db.query("UPDATE claims SET user_id = ? WHERE guild_id = ? AND season = ? AND card_id = ? AND user_id = ?");
-    const a = q.run(winner, guildId, season, cardA, userA).changes;
-    const b = q.run(winner, guildId, season, cardB, userB).changes;
-    if (a !== 1 || b !== 1) throw new Error("ownership changed"); // rolls back
+    for (const [cards, from] of [[cardsA, userA], [cardsB, userB]] as const) {
+      for (const card of cards as number[]) {
+        if (q.run(winner, guildId, season, card, from).changes !== 1) throw new Error("ownership changed"); // rolls back
+      }
+    }
   })();
 }
 

@@ -104,7 +104,7 @@ test("a duel hands both staked cards to the winner", () => {
   db.claimFree(D, a, A);
   db.claimFree(D, b, B);
 
-  db.awardDuel(D, a, A, b, B, B); // B wins
+  db.awardDuel(D, [a], A, [b], B, B); // B wins
   expect(db.ownerOf(D, a)).toBe(B);
   expect(db.ownerOf(D, b)).toBe(B);
 });
@@ -114,7 +114,7 @@ test("the challenger winning keeps their own card and takes the other", () => {
   db.claimFree(D, a, A);
   db.claimFree(D, b, B);
 
-  db.awardDuel(D, a, A, b, B, A); // A wins: card a is "moved" to its existing owner
+  db.awardDuel(D, [a], A, [b], B, A); // A wins: card a is "moved" to its existing owner
   expect(db.ownerOf(D, a)).toBe(A);
   expect(db.ownerOf(D, b)).toBe(A);
 });
@@ -125,7 +125,7 @@ test("a duel whose stake moved first is rejected and changes nothing", () => {
   db.claimFree(D, b, B);
   db.transfer(D, b, B, C); // B gifts the stake away while the offer is open
 
-  expect(() => db.awardDuel(D, a, A, b, B, A)).toThrow();
+  expect(() => db.awardDuel(D, [a], A, [b], B, A)).toThrow();
   expect(db.ownerOf(D, a)).toBe(A); // rolled back, A did not lose or gain anything
   expect(db.ownerOf(D, b)).toBe(C);
 });
@@ -190,4 +190,44 @@ test("the deck breakdown counts claimed and free per rarity", () => {
   // every card in the deck is counted exactly once
   const total = db.deckBreakdown(g).reduce((n, r) => n + r.total, 0);
   expect(total).toBe(db.allNames().length);
+});
+
+test("a duel can stake several cards on each side, all or nothing", () => {
+  const g = "1212000012120000121";
+  const gold = db.addCard("m1.jpg", "ذهبية", "الملكة", "d");                    // 50
+  const greens = ["خ1", "خ2", "خ3"].map((n) => db.addCard(`${n}.jpg`, n, "مميزة", "d")); // 3 each
+  db.claimFree(g, gold, A);
+  for (const c of greens) db.claimFree(g, c, B);
+
+  db.awardDuel(g, [gold], A, greens, B, B); // B wins the lot
+  expect(db.ownerOf(g, gold)).toBe(B);
+  for (const c of greens) expect(db.ownerOf(g, c)).toBe(B);
+});
+
+test("a bundle duel rolls back entirely if one card slipped away", () => {
+  const g = "1313000013130000131";
+  const gold = db.addCard("m2.jpg", "ذهبية ثانية", "الملكة", "d");
+  const greens = ["ي1", "ي2"].map((n) => db.addCard(`${n}.jpg`, n, "مميزة", "d"));
+  db.claimFree(g, gold, A);
+  for (const c of greens) db.claimFree(g, c, B);
+  db.transfer(g, greens[1]!, B, C); // one of B's stakes is gifted away mid-offer
+
+  expect(() => db.awardDuel(g, [gold], A, greens, B, A)).toThrow();
+  expect(db.ownerOf(g, gold)).toBe(A);        // nothing moved
+  expect(db.ownerOf(g, greens[0]!)).toBe(B);  // not even the card that was still valid
+  expect(db.ownerOf(g, greens[1]!)).toBe(C);
+});
+
+test("the stake parser accepts comma lists and rejects bad input", async () => {
+  const { parseStake } = await import("./index");
+  const one = db.addCard("p1.jpg", "كرت واحد", "نادرة", "d");
+  const two = db.addCard("p2.jpg", "كرت اثنان", "مميزة", "d");
+
+  expect(parseStake(`${one},${two}`)).toEqual({ cards: [db.getCard(one)!, db.getCard(two)!] });
+  expect(parseStake(` ${one} , #${two} `)).toEqual({ cards: [db.getCard(one)!, db.getCard(two)!] }); // spaces and # are fine
+  expect(parseStake(`${one}`)).toEqual({ cards: [db.getCard(one)!] });
+  expect(parseStake(`${one},#${one}`)).toEqual({ error: `كرت مكرر: كرت واحد` });  // same card written twice
+  expect(parseStake("")).toEqual({ error: "ما حددت أي كرت" });
+  expect(parseStake("999999")).toEqual({ error: "ما لقيت كرت: 999999" });
+  expect(parseStake("1,2,3,4,5,6")).toEqual({ error: "أقصى عدد 5 كروت لكل طرف" });
 });

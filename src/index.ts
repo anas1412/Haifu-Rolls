@@ -28,6 +28,7 @@ import { startAdmin } from "./admin";
 import {
   CLAIM_WINDOW_SECONDS,
   COLLECTION_IDLE_SECONDS,
+  DUEL_MAX_CARDS,
   DUEL_SUSPENSE_MS,
   DUEL_WINDOW_SECONDS,
   EXCHANGE_WINDOW_SECONDS,
@@ -95,7 +96,9 @@ function cardEmbed(card: db.Card, ownerId: string | null = null): EmbedBuilder {
     .addFields(
       { name: ar("الرقم"), value: ar(`#${card.id}`), inline: true },
       { name: ar("الندرة"), value: ar(card.rarity), inline: true },
-      { name: ar("المالك"), value: ar(ownerId ? `<@${ownerId}>` : "متاحة 💍"), inline: true },
+      { name: ar("القيمة"), value: ar(`${r.points} نقطة`), inline: true },
+      // full width on its own row, so the three facts above line up as a neat trio
+      { name: ar("المالك"), value: ar(ownerId ? `<@${ownerId}>` : "متاحة 💍"), inline: false },
     )
     .setImage(IMAGE_BASE_URL ? `${IMAGE_BASE_URL.replace(/\/$/, "")}/${card.file}` : `attachment://${card.file}`);
 }
@@ -166,12 +169,58 @@ function exchangeRow(offerer: string, target: string, mine: number, theirs: numb
   );
 }
 
-function duelRow(challenger: string, target: string, mine: number, theirs: number, expiresAt: number, disabled = false) {
-  const tail = `${challenger}:${target}:${mine}:${theirs}:${expiresAt}`;
+interface PendingDuel {
+  guildId: string;
+  challenger: string;
+  target: string;
+  mine: db.Card[];
+  theirs: db.Card[];
+  expiresAt: number;
+}
+
+/**
+ * Offers are held in memory rather than packed into the button id, which caps at 100 characters
+ * and cannot fit two lists of cards. They expire in minutes, so losing them on a restart is fine.
+ */
+const pendingDuels = new Map<string, PendingDuel>();
+
+function rememberDuel(duel: PendingDuel): string {
+  for (const [key, d] of pendingDuels) if (d.expiresAt < Date.now()) pendingDuels.delete(key);
+  const key = Math.random().toString(36).slice(2, 10);
+  pendingDuels.set(key, duel);
+  return key;
+}
+
+function duelRow(key: string, disabled = false) {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`duel:a:${tail}`).setLabel("قبول التحدي ⚔️").setStyle(ButtonStyle.Danger).setDisabled(disabled),
-    new ButtonBuilder().setCustomId(`duel:d:${tail}`).setLabel("رفض").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(`duel:a:${key}`).setLabel("قبول التحدي ⚔️").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(`duel:d:${key}`).setLabel("رفض").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
   );
+}
+
+const pointsOf = (cards: db.Card[]) => cards.reduce((n, c) => n + RARITIES[c.rarity].points, 0);
+
+/** One stake block: a line per card, then the totals so a lopsided offer is obvious at a glance. */
+function stakeBlock(cards: db.Card[]): string {
+  return `${cards.map(stakeLine).join("\n")}\n**${cards.length} كرت · ${pointsOf(cards)} نقطة**`;
+}
+
+/**
+ * Resolve "42,43,name" into cards. Rejects unknown cards, repeats, and oversized bundles so the
+ * offer embed can never misrepresent what is actually at stake.
+ */
+export function parseStake(input: string): { cards: db.Card[] } | { error: string } {
+  const parts = [...new Set(input.split(",").map((p) => p.trim()).filter(Boolean))];
+  if (!parts.length) return { error: "ما حددت أي كرت" };
+  if (parts.length > DUEL_MAX_CARDS) return { error: `أقصى عدد ${DUEL_MAX_CARDS} كروت لكل طرف` };
+  const cards: db.Card[] = [];
+  for (const part of parts) {
+    const card = db.findCard(part);
+    if (!card) return { error: `ما لقيت كرت: ${part}` };
+    if (cards.some((c) => c.id === card.id)) return { error: `كرت مكرر: ${card.name}` };
+    cards.push(card);
+  }
+  return { cards };
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -360,8 +409,8 @@ const commands = [
     .setName("duel")
     .setDescription("تحدَّ عضواً: كرتك مقابل كرته، والفائز يأخذ الاثنين")
     .addUserOption((o) => o.setName("member").setDescription("الخصم").setRequired(true))
-    .addStringOption((o) => o.setName("my_card").setDescription("رقم كرتك أو اسمه").setRequired(true))
-    .addStringOption((o) => o.setName("their_card").setDescription("رقم كرته أو اسمه").setRequired(true)),
+    .addStringOption((o) => o.setName("my_card").setDescription("كرتك، أو عدة كروت بينها فاصلة: 42,43").setRequired(true))
+    .addStringOption((o) => o.setName("their_card").setDescription("كرته، أو عدة كروت بينها فاصلة").setRequired(true)),
   new SlashCommandBuilder()
     .setName("rescan")
     .setDescription("(إدارة) افحص الصور الجديدة في مجلد images")
@@ -614,35 +663,39 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const target = i.options.getUser("member", true);
       if (target.id === uid) return void i.reply({ ...note("ما تقدر تتحدى نفسك", COLOR.warn), ...Ephemeral });
       if (target.bot) return void i.reply({ ...note("ما تقدر تتحدى بوت", COLOR.warn), ...Ephemeral });
-      const mine = db.findCard(i.options.getString("my_card", true));
-      const theirs = db.findCard(i.options.getString("their_card", true));
-      if (!mine || db.ownerOf(gid, mine.id) !== uid) return void i.reply({ ...note("الكرت الأول ليس في مجموعتك", COLOR.warn), ...Ephemeral });
-      if (!theirs || db.ownerOf(gid, theirs.id) !== target.id) {
-        return void i.reply({ ...note(`الكرت الثاني ليس في مجموعة ${optionName(i, "member", target)}`, COLOR.warn), ...Ephemeral });
+
+      const mineParsed = parseStake(i.options.getString("my_card", true));
+      if ("error" in mineParsed) return void i.reply({ ...note(mineParsed.error, COLOR.warn), ...Ephemeral });
+      const theirsParsed = parseStake(i.options.getString("their_card", true));
+      if ("error" in theirsParsed) return void i.reply({ ...note(theirsParsed.error, COLOR.warn), ...Ephemeral });
+      const mine = mineParsed.cards, theirs = theirsParsed.cards;
+
+      const notYours = mine.find((c) => db.ownerOf(gid, c.id) !== uid);
+      if (notYours) return void i.reply({ ...note(`ليس في مجموعتك: ${notYours.name} #${notYours.id}`, COLOR.warn), ...Ephemeral });
+      const notTheirs = theirs.find((c) => db.ownerOf(gid, c.id) !== target.id);
+      if (notTheirs) {
+        return void i.reply({ ...note(`ليس في مجموعة ${optionName(i, "member", target)}: ${notTheirs.name} #${notTheirs.id}`, COLOR.warn), ...Ephemeral });
       }
+      if (mine.some((c) => theirs.some((t) => t.id === c.id))) {
+        return void i.reply({ ...note("نفس الكرت على الجهتين", COLOR.warn), ...Ephemeral });
+      }
+
       const expiresAt = Date.now() + DUEL_WINDOW_SECONDS * 1000;
+      const key = rememberDuel({ guildId: gid, challenger: uid, target: target.id, mine, theirs, expiresAt });
       const embed = new EmbedBuilder()
         .setAuthor({ name: ar("⚔️ تحدٍ") })
         .setTitle(ar(`${callerName(i)} ضد ${optionName(i, "member", target)}`))
-        .setDescription(ar(`الفائز يأخذ الكرتين. القرعة عادلة: ${50}/${50}`))
+        .setDescription(ar("الفائز يأخذ كل الكروت."))
         .setColor(COLOR.warn)
         .addFields(
-          { name: `${callerName(i)} يراهن بـ`, value: stakeLine(mine), inline: true },
-          { name: `${optionName(i, "member", target)} يراهن بـ`, value: stakeLine(theirs), inline: true },
+          { name: `${callerName(i)} يراهن بـ`, value: stakeBlock(mine), inline: true },
+          { name: `${optionName(i, "member", target)} يراهن بـ`, value: stakeBlock(theirs), inline: true },
         )
         .setFooter({ text: "العرض صالح 5 دقائق" });
-      const msg = await i.reply({
-        content: `${target}`,
-        embeds: [arEmbed(embed)],
-        components: [duelRow(uid, target.id, mine.id, theirs.id, expiresAt)],
-        withResponse: true,
-      });
+      await i.reply({ content: `${target}`, embeds: [arEmbed(embed)], components: [duelRow(key)] });
       setTimeout(() => {
-        // Still pending only if neither card has moved; otherwise the duel already resolved.
-        if (db.ownerOf(gid, mine.id) === uid && db.ownerOf(gid, theirs.id) === target.id) {
-          msg.resource?.message
-            ?.edit({ content: "", ...note("⌛ انتهى وقت التحدي", COLOR.warn), components: [] })
-            .catch(() => {});
+        if (pendingDuels.delete(key)) {
+          i.editReply({ content: "", ...note("⌛ انتهى وقت التحدي", COLOR.warn), components: [] }).catch(() => {});
         }
       }, DUEL_WINDOW_SECONDS * 1000);
       return;
@@ -701,31 +754,35 @@ async function handleButton(i: ButtonInteraction) {
   }
 
   if (kind === "duel") {
-    const [action, challenger, target, aStr, bStr, expStr] = rest as [string, string, string, string, string, string];
-    if (uid !== target) return void i.reply({ ...note("هذا التحدي ليس لك", COLOR.warn), ...Ephemeral });
+    const [action, key] = rest as [string, string];
+    const duel = pendingDuels.get(key);
     const close = (text: string, color: number) => i.update({ content: "", ...note(text, color), components: [] });
-    if (Date.now() > Number(expStr)) return void close("⌛ انتهى وقت التحدي", COLOR.warn);
-    if (action === "d") return void close(`❌ <@${target}> رفض التحدي`, COLOR.warn);
+    if (!duel || Date.now() > duel.expiresAt) {
+      pendingDuels.delete(key);
+      return void close("⌛ انتهى وقت التحدي", COLOR.warn);
+    }
+    if (uid !== duel.target) return void i.reply({ ...note("هذا التحدي ليس لك", COLOR.warn), ...Ephemeral });
+    pendingDuels.delete(key); // one answer only, whichever it is
+    if (action === "d") return void close(`❌ <@${duel.target}> رفض التحدي`, COLOR.warn);
 
-    const mine = db.getCard(Number(aStr)), theirs = db.getCard(Number(bStr));
-    if (!mine || !theirs) return;
+    const { challenger, target, mine, theirs } = duel;
     const challengerWins = Math.random() < 0.5;
     const winner = challengerWins ? challenger : target;
+    const loser = challengerWins ? target : challenger;
     try {
-      db.awardDuel(gid, mine.id, challenger, theirs.id, target, winner);
+      db.awardDuel(gid, mine.map((c) => c.id), challenger, theirs.map((c) => c.id), target, winner);
     } catch {
       return void close("❌ تغيّرت الملكية، التحدي لم يعد صالحاً", COLOR.warn);
     }
+
     // Discord renders mentions in descriptions and fields, but never in a title: use a plain name there.
-    const loser = challengerWins ? target : challenger;
     const nameOf = async (id: string) => (await i.guild?.members.fetch(id).catch(() => null))?.displayName ?? "لاعب";
     const [challengerName, targetName] = await Promise.all([nameOf(challenger), nameOf(target)]);
     const [winnerName, loserName] = challengerWins ? [challengerName, targetName] : [targetName, challengerName];
-    const stakes = `${stakeLine(mine)}\n${stakeLine(theirs)}`;
+    const spoils = [...mine, ...theirs];
 
-    // Spin first, reveal after. Every edit is best-effort: the cards are already awarded, so a
-    // dropped frame costs nothing but a little drama.
     // Identical frames for both sides: nothing here can be read as a hint at the outcome.
+    const stakes = `${stakeBlock(mine)}\n\n${stakeBlock(theirs)}`;
     await i.update({ content: "", embeds: [arEmbed(spinEmbed(0, challengerName, targetName, stakes))], components: [] });
     for (let frame = 1; frame < SPIN_FRAMES; frame++) {
       await sleep(DUEL_SUSPENSE_MS);
@@ -736,9 +793,9 @@ async function handleButton(i: ButtonInteraction) {
     const result = new EmbedBuilder()
       .setAuthor({ name: ar("⚔️ نتيجة التحدي") })
       .setTitle(ar(`🎉 فاز ${winnerName}`))
-      .setDescription(ar(`<@${winner}> أخذ الكرتين، و<@${loser}> خسر رهانه.\nحظ أوفر يا ${loserName}.`))
+      .setDescription(ar(`<@${winner}> أخذ كل الكروت، و<@${loser}> خسر رهانه.\nحظ أوفر يا ${loserName}.`))
       .setColor(COLOR.gold)
-      .addFields({ name: ar("الغنيمة"), value: stakes });
+      .addFields({ name: ar("الغنيمة"), value: `${spoils.map(stakeLine).join("\n")}\n**${spoils.length} كرت · ${pointsOf(spoils)} نقطة**` });
     await i.editReply({ embeds: [arEmbed(result)], components: [] }).catch(() => {});
     return;
   }
