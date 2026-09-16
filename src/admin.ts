@@ -7,7 +7,7 @@
  */
 import type { Client } from "discord.js";
 import * as db from "./db";
-import { RARITIES, type Rarity } from "./config";
+import { RARITIES, RARITY_ORDER, type Rarity } from "./config";
 
 const PASSWORD = process.env.ADMIN_PASSWORD ?? "";
 const COOKIE = "haifu_admin";
@@ -145,7 +145,8 @@ async function serversPage(client: Client): Promise<Response> {
 async function serverPage(client: Client, guildId: string, url: URL, flash = ""): Promise<Response> {
   const guild = client.guilds.cache.get(guildId);
   const search = url.searchParams.get("q") ?? "";
-  const showAll = url.searchParams.get("all") === "1";
+  const rarity = url.searchParams.get("rarity") ?? "";
+  const owner = url.searchParams.get("owner") ?? "";
   const season = db.currentSeason(guildId);
 
   const players = db.seasonTop(guildId, season, 100);
@@ -156,14 +157,12 @@ async function serverPage(client: Client, guildId: string, url: URL, flash = "")
     .map(
       (p) =>
         `<tr><td class="name">${esc(p.name)}</td><td>${p.count}</td><td>${p.points}</td>
-         <td><a href="/g/${esc(guildId)}?q=&owner=${esc(p.userId)}">view</a></td></tr>`,
+         <td><a href="/g/${esc(guildId)}?owner=${esc(p.userId)}">view cards</a></td></tr>`,
     )
     .join("");
 
-  // owner filter, applied after the query so the search box stays simple
-  const ownerFilter = url.searchParams.get("owner") ?? "";
-  let cards = db.cardsWithOwners(guildId, { search, onlyClaimed: !showAll && !search, limit: 300 });
-  if (ownerFilter) cards = cards.filter((c) => c.owner === ownerFilter);
+  const LIMIT = 300;
+  const { cards, total } = db.cardsWithOwners(guildId, { search, rarity, owner, limit: LIMIT });
 
   const options = named.map((p) => `<option value="${esc(p.userId)}">${esc(p.name)}</option>`).join("");
   const cardRows = await Promise.all(
@@ -195,29 +194,37 @@ async function serverPage(client: Client, guildId: string, url: URL, flash = "")
   );
 
   const deck = db.deckBreakdown(guildId);
-  const total = deck.reduce((n, r) => n + r.total, 0);
+  const deckTotal = deck.reduce((n, r) => n + r.total, 0);
   const claimed = deck.reduce((n, r) => n + r.claimed, 0);
 
   return page(
     guild?.name ?? guildId,
     `${flash ? `<div class="flash">${esc(flash)}</div>` : ""}
-     <p class="sub"><a href="/">← all servers</a> · season ${season} · ${claimed} of ${total} cards claimed</p>
+     <p class="sub"><a href="/">← all servers</a> · season ${season} · ${claimed} of ${deckTotal} cards claimed</p>
 
      <h2>Players</h2>
      <div class="card"><table><tr><th>Name</th><th>Cards</th><th>Points</th><th></th></tr>${playerRows || `<tr><td colspan="4" class="muted">nobody yet</td></tr>`}</table></div>
 
      <h2>Cards</h2>
      <form class="bar" method="get" action="/g/${esc(guildId)}">
-       <input name="q" value="${esc(search)}" placeholder="card number or name">
-       <label class="muted"><input type="checkbox" name="all" value="1" ${showAll ? "checked" : ""}> include unclaimed</label>
-       <button>Search</button>
-       ${ownerFilter ? `<a href="/g/${esc(guildId)}">clear owner filter</a>` : ""}
+       <input name="q" value="${esc(search)}" placeholder="number or name">
+       <select name="rarity">
+         <option value="">any rarity</option>
+         ${[...RARITY_ORDER].reverse().map((t) => `<option value="${esc(t)}" ${t === rarity ? "selected" : ""}>${RARITIES[t].emoji} ${esc(t)}</option>`).join("")}
+       </select>
+       <select name="owner">
+         <option value="">anyone</option>
+         <option value="none" ${owner === "none" ? "selected" : ""}>unclaimed only</option>
+         ${named.map((p) => `<option value="${esc(p.userId)}" ${p.userId === owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+       </select>
+       <button>Filter</button>
+       ${search || rarity || owner ? `<a href="/g/${esc(guildId)}">reset</a>` : ""}
      </form>
      <div class="card"><table>
        <tr><th>#</th><th>Card</th><th>Rarity</th><th>Owner</th><th>Give to</th><th></th></tr>
        ${cardRows.join("") || `<tr><td colspan="6" class="muted">no matches</td></tr>`}
      </table></div>
-     <p class="sub">Showing ${cards.length} card(s). Search narrows it; by default only claimed cards are listed.</p>`,
+     <p class="sub">Showing ${cards.length} of ${total} matching card(s)${total > LIMIT ? ` · narrow the filters to see the rest` : ""}.</p>`,
   );
 }
 

@@ -101,7 +101,8 @@ A web page for managing the game without touching SQL. It only runs when `ADMIN_
 
 - Lists every server, with players, cards claimed, and the season.
 - Per server: every player's collection size and points, and every card with its owner.
-- Search by card number or name, give a card to anyone, or send one back to the pool.
+- Filter cards by number or name, by rarity, and by owner (including unclaimed only).
+- Give a card to anyone, or send one back to the pool.
 - Sign in once; a cookie keeps you signed in on that device for 30 days.
 
 Set `ADMIN_PASSWORD` in the host's variables and open the service's public URL.

@@ -197,22 +197,39 @@ export function allTimeLeaderboard(guildId: string, limit = 10): { userId: strin
 
 // ---------- admin ----------
 
-/** Every card with its current owner in this server's live season, optionally filtered. */
+export interface CardFilter {
+  search?: string;   // card number or part of the name
+  rarity?: string;   // "" for any tier
+  owner?: string;    // "" any, "none" unclaimed, otherwise a user id
+  limit?: number;
+}
+
+/** Cards with their owner in this server's live season, plus how many matched before the limit. */
 export function cardsWithOwners(
   guildId: string,
-  opts: { search?: string; onlyClaimed?: boolean; limit?: number } = {},
-): { id: number; name: string; rarity: Rarity; owner: string | null }[] {
+  opts: CardFilter = {},
+): { cards: { id: number; name: string; rarity: Rarity; owner: string | null }[]; total: number } {
   const search = (opts.search ?? "").trim().replace(/^#/, "");
   const asId = /^\d+$/.test(search) ? Number(search) : -1;
-  return db
-    .query<{ id: number; name: string; rarity: Rarity; owner: string | null }, [string, number, string, string, number, number, number]>(
-      `SELECT c.id, c.name, c.rarity, CAST(k.user_id AS TEXT) AS owner
-       FROM cards c LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ? AND k.season = ?
-       WHERE (? = '' OR c.name LIKE ? OR c.id = ?)
-         AND (? = 0 OR k.card_id IS NOT NULL)
-       ORDER BY c.id LIMIT ?`,
-    )
-    .all(guildId, currentSeason(guildId), search, `%${search}%`, asId, opts.onlyClaimed ? 1 : 0, opts.limit ?? 200);
+  const rarity = opts.rarity ?? "";
+  const owner = opts.owner ?? "";
+  const where = `FROM cards c LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ? AND k.season = ?
+     WHERE (? = '' OR c.name LIKE ? OR c.id = ?)
+       AND (? = '' OR c.rarity = ?)
+       AND (? = '' OR (? = 'none' AND k.card_id IS NULL)
+                   OR (? NOT IN ('', 'none') AND CAST(k.user_id AS TEXT) = ?))`;
+  const args = [
+    guildId, currentSeason(guildId),
+    search, `%${search}%`, asId,
+    rarity, rarity,
+    owner, owner, owner, owner,
+  ] as const;
+
+  const total = (db.query(`SELECT COUNT(*) AS n ${where}`).get(...args) as { n: number }).n;
+  const cards = db
+    .query(`SELECT c.id, c.name, c.rarity, CAST(k.user_id AS TEXT) AS owner ${where} ORDER BY c.id LIMIT ?`)
+    .all(...args, opts.limit ?? 200) as { id: number; name: string; rarity: Rarity; owner: string | null }[];
+  return { cards, total };
 }
 
 /** Give a card to someone, whether or not it was already owned. */
