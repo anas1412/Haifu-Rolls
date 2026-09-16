@@ -88,14 +88,15 @@ straight **50/50 coin flip** decides it. The winner takes everything staked.
 
 - Stakes are **free**: anything against anything. The defender has to accept, and each side's cards are
   listed with a running total (`5 كرت · 15 نقطة`), so a lopsided offer is obvious before they decide.
-- Up to `DUEL_MAX_CARDS` (5) cards per side.
+- No limit on how many cards a side may stake. Offers longer than `DUEL_LIST_LIMIT` (10) list the
+  first ten and summarise the rest, but the totals always count every card.
 - Every card's owner is re-checked at the moment of the flip, and the whole duel is one atomic write:
   if any single card moved while the offer was open, nothing changes at all.
 - On accept the message spins for a few seconds, then reveals the result. Every spin frame is
   identical for both players, so nothing in it hints at the outcome. The winner is decided and the
   cards awarded **before** the spin, so a dropped frame or a restart never changes who won.
 - No daily cap: the other side has to agree to every duel, so consent is the throttle.
-- Tune it with `DUEL_MAX_CARDS`, `DUEL_WINDOW_SECONDS`, and `DUEL_SUSPENSE_MS` (0 for an instant reveal) in `config.ts`.
+- Tune it with `DUEL_LIST_LIMIT`, `DUEL_WINDOW_SECONDS`, and `DUEL_SUSPENSE_MS` (0 for an instant reveal) in `config.ts`.
 - Pending offers live in memory, so a restart cancels any that are still open. They only last 5 minutes anyway.
 
 ## Admin dashboard

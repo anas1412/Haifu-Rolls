@@ -229,5 +229,18 @@ test("the stake parser accepts comma lists and rejects bad input", async () => {
   expect(parseStake(`${one},#${one}`)).toEqual({ error: `كرت مكرر: كرت واحد` });  // same card written twice
   expect(parseStake("")).toEqual({ error: "ما حددت أي كرت" });
   expect(parseStake("999999")).toEqual({ error: "ما لقيت كرت: 999999" });
-  expect(parseStake("1,2,3,4,5,6")).toEqual({ error: "أقصى عدد 5 كروت لكل طرف" });
+  const many = parseStake("1,2,3,4,5,6");
+  expect("cards" in many && many.cards).toHaveLength(6); // no cap on how many you may stake
+});
+
+test("a huge stake still fits inside a Discord embed field", async () => {
+  const { stakeBlock, ar } = await import("./index");
+  const many = Array.from({ length: 100 }, (_, n) =>
+    db.getCard(db.addCard(`big${n}.jpg`, `كرت طويل الاسم رقم ${n}`, "الملكة", "d"))!,
+  );
+  const rendered = ar(stakeBlock(many)); // ar() is what actually reaches Discord
+  expect(rendered.length).toBeLessThan(1024); // Discord rejects the whole message past this
+  expect(rendered).toContain("100 كرت");      // the total still counts every card
+  expect(rendered).toContain("5000 نقطة");    // 100 queens
+  expect(rendered).toContain("كرت آخر");      // the rest are summarised, not listed
 });

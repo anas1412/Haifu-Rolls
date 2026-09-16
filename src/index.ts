@@ -28,7 +28,7 @@ import { startAdmin } from "./admin";
 import {
   CLAIM_WINDOW_SECONDS,
   COLLECTION_IDLE_SECONDS,
-  DUEL_MAX_CARDS,
+  DUEL_LIST_LIMIT,
   DUEL_SUSPENSE_MS,
   DUEL_WINDOW_SECONDS,
   EXCHANGE_WINDOW_SECONDS,
@@ -200,9 +200,16 @@ function duelRow(key: string, disabled = false) {
 
 const pointsOf = (cards: db.Card[]) => cards.reduce((n, c) => n + RARITIES[c.rarity].points, 0);
 
-/** One stake block: a line per card, then the totals so a lopsided offer is obvious at a glance. */
-function stakeBlock(cards: db.Card[]): string {
-  return `${cards.map(stakeLine).join("\n")}\n**${cards.length} كرت · ${pointsOf(cards)} نقطة**`;
+/**
+ * One stake block: a line per card, then the totals so a lopsided offer is obvious at a glance.
+ * Long bundles are summarised rather than listed, because an embed field caps at 1024 characters
+ * and a truncated field would make Discord reject the whole offer.
+ */
+export function stakeBlock(cards: db.Card[]): string {
+  const shown = cards.slice(0, DUEL_LIST_LIMIT).map(stakeLine);
+  const rest = cards.length - shown.length;
+  if (rest > 0) shown.push(`… و${rest} كرت آخر`);
+  return `${shown.join("\n")}\n**${cards.length} كرت · ${pointsOf(cards)} نقطة**`;
 }
 
 /**
@@ -212,7 +219,6 @@ function stakeBlock(cards: db.Card[]): string {
 export function parseStake(input: string): { cards: db.Card[] } | { error: string } {
   const parts = [...new Set(input.split(",").map((p) => p.trim()).filter(Boolean))];
   if (!parts.length) return { error: "ما حددت أي كرت" };
-  if (parts.length > DUEL_MAX_CARDS) return { error: `أقصى عدد ${DUEL_MAX_CARDS} كروت لكل طرف` };
   const cards: db.Card[] = [];
   for (const part of parts) {
     const card = db.findCard(part);

@@ -39,7 +39,7 @@ export const RUSH_MIN_RARITY: Rarity = "نادرة"; // drops are never worse th
 // Stakes are free on purpose, so a newcomer can win big. The defender has to accept, which is the safeguard.
 // There is no daily cap: the other side must agree to every duel, so that consent is the throttle.
 export const DUEL_WINDOW_SECONDS = 300;  // how long the other side has to answer
-export const DUEL_MAX_CARDS = 5;        // most cards either side may stake in one duel
+export const DUEL_LIST_LIMIT = 10;      // cards listed by name in an offer before it summarises the rest
 export const DUEL_SUSPENSE_MS = 1000;    // pause between the spin frames before the result. 0 reveals instantly
 
 export const IMAGES_DIR = "images";
