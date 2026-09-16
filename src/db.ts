@@ -195,6 +195,47 @@ export function allTimeLeaderboard(guildId: string, limit = 10): { userId: strin
     .all(guildId, limit);
 }
 
+// ---------- admin ----------
+
+/** Every card with its current owner in this server's live season, optionally filtered. */
+export function cardsWithOwners(
+  guildId: string,
+  opts: { search?: string; onlyClaimed?: boolean; limit?: number } = {},
+): { id: number; name: string; rarity: Rarity; owner: string | null }[] {
+  const search = (opts.search ?? "").trim().replace(/^#/, "");
+  const asId = /^\d+$/.test(search) ? Number(search) : -1;
+  return db
+    .query<{ id: number; name: string; rarity: Rarity; owner: string | null }, [string, number, string, string, number, number, number]>(
+      `SELECT c.id, c.name, c.rarity, CAST(k.user_id AS TEXT) AS owner
+       FROM cards c LEFT JOIN claims k ON k.card_id = c.id AND k.guild_id = ? AND k.season = ?
+       WHERE (? = '' OR c.name LIKE ? OR c.id = ?)
+         AND (? = 0 OR k.card_id IS NOT NULL)
+       ORDER BY c.id LIMIT ?`,
+    )
+    .all(guildId, currentSeason(guildId), search, `%${search}%`, asId, opts.onlyClaimed ? 1 : 0, opts.limit ?? 200);
+}
+
+/** Give a card to someone, whether or not it was already owned. */
+export function setOwner(guildId: string, cardId: number, userId: string): void {
+  db.query(
+    `INSERT INTO claims (guild_id, season, card_id, user_id, claimed_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(guild_id, season, card_id) DO UPDATE SET user_id = excluded.user_id`,
+  ).run(guildId, currentSeason(guildId), cardId, userId, now());
+}
+
+/** Return a card to the pool regardless of who held it. */
+export function clearOwner(guildId: string, cardId: number): boolean {
+  return db.query("DELETE FROM claims WHERE guild_id = ? AND season = ? AND card_id = ?").run(guildId, currentSeason(guildId), cardId).changes === 1;
+}
+
+/** Servers that have any game history, for the dashboard list. */
+export function guildsWithData(): string[] {
+  return db
+    .query<{ g: string }, []>("SELECT DISTINCT CAST(guild_id AS TEXT) AS g FROM claims")
+    .all()
+    .map((r) => r.g);
+}
+
 // ---------- cards ----------
 
 export function addCard(file: string, name: string, rarity: Rarity, description: string): number {

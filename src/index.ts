@@ -24,6 +24,7 @@ import {
 import { join } from "node:path";
 import * as db from "./db";
 import { scanNewImages } from "./scanner";
+import { startAdmin } from "./admin";
 import {
   CLAIM_WINDOW_SECONDS,
   COLLECTION_IDLE_SECONDS,
@@ -399,6 +400,7 @@ client.once(Events.ClientReady, async (c) => {
   const added = await scanNewImages();
   console.log(`startup scan: ${added.length} new cards`);
   for (const id of c.guilds.cache.keys()) scheduleRush(id);
+  startAdmin(c); // web dashboard, only if ADMIN_PASSWORD is set
 });
 
 client.on(Events.GuildCreate, async (guild) => {

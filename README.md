@@ -95,6 +95,17 @@ straight **50/50 coin flip** decides it. The winner takes both cards.
 - No daily cap: the other side has to agree to every duel, so consent is the throttle.
 - Tune it with `DUEL_WINDOW_SECONDS` and `DUEL_SUSPENSE_MS` (set to 0 for an instant reveal) in `config.ts`.
 
+## Admin dashboard
+
+A web page for managing the game without touching SQL. It only runs when `ADMIN_PASSWORD` is set.
+
+- Lists every server, with players, cards claimed, and the season.
+- Per server: every player's collection size and points, and every card with its owner.
+- Search by card number or name, give a card to anyone, or send one back to the pool.
+- Sign in once; a cookie keeps you signed in on that device for 30 days.
+
+Set `ADMIN_PASSWORD` in the host's variables and open the service's public URL.
+
 ## Seasons
 
 A season runs until the **last unclaimed card in that server is taken**. Then:
