@@ -22,7 +22,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/divorce <id or name>` | Release a card you own |
 | `/gift <member> <id or name>` | Give a card away |
 | `/exchange <member> <my_card> <their_card>` | Propose a trade by id or name. The other member gets Accept / Decline buttons (5 min) |
-| `/duel <member> <my_card> <their_card>` | Stake cards against theirs, comma-separated for several or `all` for a whole collection. A draw decides, winner takes all |
+| `/duel <member> <my_card> <their_card>` | Stake up to 10 cards against theirs, comma-separated. A draw decides, winner takes all |
 | `/rescan` | (Manage Server) register new photos in `images/` |
 | `/backup` | (bot owner) download the database file |
 | `/restore <file>` | (bot owner) replace the database with an uploaded `haifa.db` |

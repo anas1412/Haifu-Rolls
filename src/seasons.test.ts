@@ -230,17 +230,12 @@ test("the stake parser accepts comma lists and rejects bad input", async () => {
   expect(parseStake("")).toEqual({ error: "ما حددت أي كرت" });
   expect(parseStake("999999")).toEqual({ error: "ما لقيت كرت: 999999" });
   const many = parseStake("1,2,3,4,5,6");
-  expect("cards" in many && many.cards).toHaveLength(6); // no cap on how many you may stake
-});
+  expect("cards" in many && many.cards).toHaveLength(6);
 
-test("'all' stakes the whole collection without typing any numbers", async () => {
-  const { parseStake } = await import("./index");
-  const owned = [db.getCard(1)!, db.getCard(2)!];
-
-  expect(parseStake("all", owned)).toEqual({ cards: owned });
-  expect(parseStake("ALL", owned)).toEqual({ cards: owned });   // case does not matter
-  expect(parseStake(" الكل ", owned)).toEqual({ cards: owned }); // and the Arabic word works too
-  expect(parseStake("all", [])).toEqual({ error: "المجموعة فارغة" });
+  const ten = parseStake("1,2,3,4,5,6,7,8,9,10");
+  expect("cards" in ten && ten.cards).toHaveLength(10);          // the cap itself is allowed
+  expect(parseStake("1,2,3,4,5,6,7,8,9,10,11")).toEqual({ error: "أقصى 10 كروت في التحدي" });
+  expect(parseStake("all")).toEqual({ error: "ما لقيت كرت: all" }); // no whole-collection shortcut
 });
 
 test("a huge stake still fits inside a Discord embed field", async () => {
