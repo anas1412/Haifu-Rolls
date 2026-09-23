@@ -38,7 +38,7 @@ import {
   RARITIES,
   RARITY_ORDER,
   ROLL_ONLY_UNCLAIMED,
-  ROLLS_PER_DAY,
+  ROLLS_PER_RESET,
   RUSH_MAX_HOURS,
   RUSH_MIN_HOURS,
   RUSH_MIN_RARITY,
@@ -152,7 +152,7 @@ const optionName = (i: ChatInputCommandInteraction, option: string, user: User):
   memberName(i.options.getMember(option) as MemberLike, user);
 
 function fmtWait(seconds: number): string {
-  const m = Math.floor(seconds / 60);
+  const m = Math.max(1, Math.ceil(seconds / 60)); // never "0 د" while something is still locked
   return m >= 60 ? `${Math.floor(m / 60)} س ${m % 60} د` : `${m} د`;
 }
 
@@ -341,7 +341,7 @@ async function dropRush(guildId: string): Promise<void> {
       if (channel?.isSendable()) {
         const embed = cardEmbed(card)
           .setAuthor({ name: ar("⚡ كرت طائر") })
-          .setFooter({ text: ar("مجاني · لا يستهلك طلبك اليومي · أول من يضغط يربحه") });
+          .setFooter({ text: ar("مجاني · لا يستهلك طلبك · أول من يضغط يربحه") });
         await channel.send({ embeds: [embed], components: [rushRow(card.id)], files: cardFiles(card) });
         console.log(`rush drop in ${guildId}: ${card.name} [${card.rarity}]`);
       }
@@ -413,6 +413,7 @@ const commands = [
     .addStringOption((o) => o.setName("my_card").setDescription("رقم كرتك أو اسمه").setRequired(true))
     .addStringOption((o) => o.setName("their_card").setDescription("رقم كرته أو اسمه").setRequired(true)),
   new SlashCommandBuilder().setName("deck").setDescription("كل الدرجات: كم كرت مطلوب وكم باقي"),
+  new SlashCommandBuilder().setName("usage").setDescription("كم رمية وطلب باقي لك، ومتى يتجددان"),
   new SlashCommandBuilder()
     .setName("duel")
     .setDescription("تحدَّ عضواً: كرتك مقابل كرته، والفائز يأخذ الاثنين")
@@ -498,9 +499,9 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
   switch (i.commandName) {
     case "roll": {
-      const used = db.rollsToday(gid, uid);
-      if (used >= ROLLS_PER_DAY) return void i.reply({ ...note(`⏳ خلصت رميّات اليوم. تتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`, COLOR.warn), ...Ephemeral });
-      const card = pickCard(gid, undefined, db.cardsRolledToday(gid, uid));
+      const used = db.rollsUsed(gid, uid);
+      if (used >= ROLLS_PER_RESET) return void i.reply({ ...note(`⏳ خلصت رميّاتك. تتجدد بعد ${fmtWait(db.secondsUntilRollRefill())}`, COLOR.warn), ...Ephemeral });
+      const card = pickCard(gid, undefined, db.cardsRolledThisWindow(gid, uid));
       if (!card) {
         const any = Object.keys(db.poolCounts()).length > 0;
         return void i.reply({ ...note(any ? "كل الكروت مملوكة في هذا السيرفر. انتظر /divorce من أحد" : "ما في كروت بعد. حطّ صور في مجلد images وجرّب /rescan", COLOR.warn), ...Ephemeral });
@@ -508,7 +509,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.deferReply(); // acknowledge within Discord's 3-second window
       db.recordRoll(gid, uid, card.id);
       const owner = db.ownerOf(gid, card.id);
-      const embed = cardEmbed(card, owner).setFooter({ text: ar(`رميّات متبقية اليوم: ${ROLLS_PER_DAY - used - 1}/${ROLLS_PER_DAY}`) });
+      const embed = cardEmbed(card, owner).setFooter({ text: ar(`رميّات متبقية: ${ROLLS_PER_RESET - used - 1}/${ROLLS_PER_RESET}`) });
       if (owner) return void (await i.editReply({ embeds: [embed], files: cardFiles(card) }));
       const expiresAt = Date.now() + CLAIM_WINDOW_SECONDS * 1000;
       const msg = await i.editReply({ embeds: [embed], components: [claimRow(card.id, expiresAt)], files: cardFiles(card) });
@@ -643,6 +644,18 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       return void i.editReply(note(`✅ تم الاستبدال. ${total} كرت في القاعدة الجديدة.`, COLOR.ok));
     }
 
+    case "usage": {
+      const left = ROLLS_PER_RESET - db.rollsUsed(gid, uid), claimWait = db.secondsUntilClaim(gid, uid);
+      const embed = new EmbedBuilder()
+        .setAuthor({ name: ar(`⏳ رصيد ${callerName(i)}`) })
+        .setColor(left > 0 || claimWait === 0 ? COLOR.ok : COLOR.warn)
+        .addFields(
+          { name: "🎲 الرميّات", value: `**${left}/${ROLLS_PER_RESET}** متبقية\n${left === ROLLS_PER_RESET ? "كاملة" : `تتجدد بعد ${fmtWait(db.secondsUntilRollRefill())}`}`, inline: true },
+          { name: "💍 الطلب", value: claimWait === 0 ? "**متاح الآن**" : `القادم بعد **${fmtWait(claimWait)}**`, inline: true },
+        );
+      return void i.reply({ embeds: [arEmbed(embed)], ...Ephemeral });
+    }
+
     case "deck": {
       await i.deferReply();
       const rows = db.deckBreakdown(gid);
@@ -730,7 +743,8 @@ async function handleButton(i: ButtonInteraction) {
     const card = db.getCard(cardId);
     if (!card) return;
     if (Date.now() > expiresAt) return void i.reply({ ...note("⌛ انتهى وقت الطلب", COLOR.warn), ...Ephemeral });
-    if (db.claimedToday(gid, uid)) return void i.reply({ ...note(`⏳ استخدمت طلب اليوم. يتجدد بعد ${fmtWait(db.secondsUntilMidnight())}`, COLOR.warn), ...Ephemeral });
+    const claimWait = db.secondsUntilClaim(gid, uid);
+    if (claimWait > 0) return void i.reply({ ...note(`⏳ طلبك القادم بعد ${fmtWait(claimWait)}`, COLOR.warn), ...Ephemeral });
     if (!db.claim(gid, cardId, uid)) return void i.reply({ ...note("💔 سبقك أحد إليها", COLOR.warn), ...Ephemeral });
     const footer = i.message.embeds[0]?.footer?.text;
     const embed = cardEmbed(card, uid);

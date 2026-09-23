@@ -17,6 +17,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/collection [member]` | Summary page plus one card per page with its photo. Prev / next buttons, greyed out after 2 idle minutes |
 | `/card <id or name>` | Look up a card and see who owns it |
 | `/deck` | How many cards exist, how many are claimed, and how many are left per rarity |
+| `/usage` | Your rolls left and when they refill, and when you can claim next |
 | `/top [season]` | This season's standings. Pass a number to see a finished season |
 | `/leaderboard` | All-time table of season medals. Never resets |
 | `/divorce <id or name>` | Release a card you own |
@@ -46,7 +47,7 @@ already been shown to them.
 
 Rolls only show cards nobody in the server owns yet (`ROLL_ONLY_UNCLAIMED` in `src/config.ts`; set to `False` to roll owned cards too).
 
-Limits: **3 rolls per day**, **1 claim per day**. Both reset at **midnight**, local time of the machine running the bot. Numbers live in `src/config.ts`.
+Limits: **5 rolls**, refilling for everyone every **2 hours** (windows counted from midnight, local time of the machine running the bot). **1 claim**, then a **3-hour** cooldown from the moment you claimed. `/usage` shows what you have left. Numbers live in `src/config.ts`.
 
 ## Run your own copy (optional)
 
@@ -161,7 +162,7 @@ Railway wipes the container disk on every deploy, so the database must live on a
 - `src/index.ts` – Discord bot and commands (discord.js)
 - `src/scanner.ts` – registers new photos: uses `seed.json` if the file is listed there, else random (edit the name lists here)
 - `seed.json` – the 500 curated cards: file, name, rarity, description. Edit names or rarities here before first run
-- `src/db.ts` – SQLite via `bun:sqlite` (`haifa.db`): cards, owners, daily limits. Ownership is per server.
-- `src/config.ts` – rarities, weights, points, daily limits, `ROLL_ONLY_UNCLAIMED`, `IMAGE_BASE_URL`
+- `src/db.ts` – SQLite via `bun:sqlite` (`haifa.db`): cards, owners, roll and claim timers. Ownership is per server.
+- `src/config.ts` – rarities, weights, points, roll and claim timers, `ROLL_ONLY_UNCLAIMED`, `IMAGE_BASE_URL`
 - `scripts/optimize-images.ts` + `hooks/pre-commit` – image compression (sharp), automatic on commit
 - `index.html` – landing page with the invite link (open it locally, or serve it from anywhere)

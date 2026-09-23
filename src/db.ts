@@ -4,7 +4,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DB_PATH, RARITIES, type Rarity } from "./config";
+import { CLAIM_COOLDOWN_HOURS, DB_PATH, RARITIES, ROLL_RESET_HOURS, type Rarity } from "./config";
 
 export interface Card {
   id: number;
@@ -399,36 +399,38 @@ export function claimFree(guildId: string, cardId: number, userId: string): bool
   return true;
 }
 
-// ---------- daily limits (reset at local midnight) ----------
+// ---------- limits: rolls refill in shared windows, the claim is a personal cooldown ----------
 
-export function dayStart(): number {
+/** Start of the current roll window. Windows are counted from local midnight so everyone refills together. */
+export function rollWindowStart(): number {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  return d.getTime() / 1000;
+  const midnight = d.getTime() / 1000, len = ROLL_RESET_HOURS * 3600;
+  return midnight + Math.floor((now() - midnight) / len) * len;
 }
 
-export function secondsUntilMidnight(): number {
-  return dayStart() + 86400 - now();
+export function secondsUntilRollRefill(): number {
+  return rollWindowStart() + ROLL_RESET_HOURS * 3600 - now();
 }
 
-export function rollsToday(guildId: string, userId: string): number {
+export function rollsUsed(guildId: string, userId: string): number {
   return db
     .query<{ n: number }, [string, string, number]>("SELECT COUNT(*) AS n FROM rolls WHERE guild_id = ? AND user_id = ? AND rolled_at >= ?")
-    .get(guildId, userId, dayStart())!.n;
+    .get(guildId, userId, rollWindowStart())!.n;
 }
 
 export function recordRoll(guildId: string, userId: string, cardId: number): void {
   db.query("INSERT INTO rolls (guild_id, user_id, rolled_at, card_id) VALUES (?, ?, ?, ?)").run(guildId, userId, now(), cardId);
-  db.query("DELETE FROM rolls WHERE rolled_at < ?").run(dayStart());
+  db.query("DELETE FROM rolls WHERE rolled_at < ?").run(rollWindowStart());
 }
 
-/** Cards this player has already been shown today, so their remaining rolls can avoid them. */
-export function cardsRolledToday(guildId: string, userId: string): number[] {
+/** Cards this player has already been shown this window, so their remaining rolls can avoid them. */
+export function cardsRolledThisWindow(guildId: string, userId: string): number[] {
   return db
     .query<{ card_id: number }, [string, string, number]>(
       "SELECT card_id FROM rolls WHERE guild_id = ? AND user_id = ? AND rolled_at >= ? AND card_id IS NOT NULL",
     )
-    .all(guildId, userId, dayStart())
+    .all(guildId, userId, rollWindowStart())
     .map((r) => r.card_id);
 }
 
@@ -459,9 +461,10 @@ export function awardDuel(guildId: string, cardsA: number[], userA: string, card
   })();
 }
 
-export function claimedToday(guildId: string, userId: string): boolean {
+/** 0 when the player may claim now, otherwise how long until they can. */
+export function secondsUntilClaim(guildId: string, userId: string): number {
   const row = db
     .query<{ claimed_at: number }, [string, string]>("SELECT claimed_at FROM last_claim WHERE guild_id = ? AND user_id = ?")
     .get(guildId, userId);
-  return row !== null && row.claimed_at >= dayStart();
+  return row ? Math.max(0, row.claimed_at + CLAIM_COOLDOWN_HOURS * 3600 - now()) : 0;
 }

@@ -169,11 +169,11 @@ test("an exhausted deck still returns nothing", () => {
 test("rolls remember which card they showed", () => {
   const g = "3333000033330000333";
   const card = db.addCard("r5.jpg", "r5", "نادرة", "d");
-  expect(db.cardsRolledToday(g, A)).toEqual([]);
+  expect(db.cardsRolledThisWindow(g, A)).toEqual([]);
   db.recordRoll(g, A, card);
-  expect(db.cardsRolledToday(g, A)).toEqual([card]);
-  expect(db.cardsRolledToday(g, B)).toEqual([]); // per player
-  expect(db.rollsToday(g, A)).toBe(1);
+  expect(db.cardsRolledThisWindow(g, A)).toEqual([card]);
+  expect(db.cardsRolledThisWindow(g, B)).toEqual([]); // per player
+  expect(db.rollsUsed(g, A)).toBe(1);
 });
 
 // ---------- /deck ----------
@@ -255,4 +255,21 @@ test("a huge stake still fits inside a Discord embed field", async () => {
   const bothSides = `${stakeBlock(many)}\n\n${stakeBlock(many)}`;
   expect(ar(bothSides).length).toBeLessThan(1024);
   expect(ar(stakeBlock([...many, ...many])).length).toBeLessThan(1024);
+});
+
+test("rolls refill in shared 2h windows; the claim is a 3h cooldown from your own claim", () => {
+  const start = db.rollWindowStart(), nowS = Date.now() / 1000;
+  const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
+  expect(start).toBeLessThanOrEqual(nowS);
+  expect(nowS - start).toBeLessThan(2 * 3600);            // we are inside the current window
+  expect((start - midnight) % (2 * 3600)).toBe(0);         // windows line up from midnight for everyone
+  expect(db.secondsUntilRollRefill()).toBeGreaterThan(0);
+
+  const g = "cooldown-guild", card = db.addCard("cd.jpg", "كرت الانتظار", "عادية", "d");
+  expect(db.secondsUntilClaim(g, "fresh")).toBe(0);        // never claimed: free to claim
+  db.claim(g, card, "claimer");
+  const wait = db.secondsUntilClaim(g, "claimer");
+  expect(wait).toBeGreaterThan(3 * 3600 - 5);              // just claimed: about 3 hours to go
+  expect(wait).toBeLessThanOrEqual(3 * 3600);
+  expect(db.secondsUntilClaim(g, "fresh")).toBe(0);        // someone else's claim does not lock you
 });

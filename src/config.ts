@@ -22,9 +22,9 @@ export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
  */
 export const SECRET_RARITIES: Rarity[] = ["المنتخب", "كيرك"];
 
-export const ROLLS_PER_DAY = 3;          // rolls each player gets per day
-// One claim per player per day (fixed).
-// Both reset at midnight, local time of the machine running the bot.
+export const ROLLS_PER_RESET = 5;        // rolls each player gets per window
+export const ROLL_RESET_HOURS = 2;       // rolls refill for everyone together every this many hours (windows start at midnight)
+export const CLAIM_COOLDOWN_HOURS = 3;   // one claim, then wait this long from the moment you claimed
 export const CLAIM_WINDOW_SECONDS = 30;  // how long the claim button stays alive after a roll
 export const EXCHANGE_WINDOW_SECONDS = 300;
 export const COLLECTION_IDLE_SECONDS = 120; // /collection browsing buttons grey out after this long without a click
