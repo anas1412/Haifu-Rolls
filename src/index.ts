@@ -40,6 +40,7 @@ import {
   ROLL_ONLY_UNCLAIMED,
   ROLLS_PER_RESET,
   RUSH_MAX_HOURS,
+  RUSH_MAX_RARITY,
   RUSH_MIN_HOURS,
   RUSH_MIN_RARITY,
   SECRET_RARITIES,
@@ -110,10 +111,10 @@ function cardFiles(card: db.Card): AttachmentBuilder[] {
 }
 
 /** Weighted pick across the tiers that still have a candidate once `skip` is removed. */
-function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>, skipTiers: db.Card["rarity"][]): db.Card | null {
+function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>, maxRarity: db.Card["rarity"] | undefined): db.Card | null {
   const floor = minRarity ? RARITY_ORDER.indexOf(minRarity) : 0;
-  const tiers = RARITY_ORDER.slice(floor)
-    .filter((tier) => !skipTiers.includes(tier))
+  const ceiling = maxRarity ? RARITY_ORDER.indexOf(maxRarity) + 1 : RARITY_ORDER.length;
+  const tiers = RARITY_ORDER.slice(floor, ceiling)
     .map((tier) => ({ tier, cards: db.cardsInRarity(tier, scope).filter((c) => !skip.has(c.id)) }))
     .filter((t) => t.cards.length);
   if (!tiers.length) return null;
@@ -130,12 +131,12 @@ function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | 
  * Pick a card to show. `exclude` holds cards the player has already seen today: they are skipped
  * so the same card is not rolled twice, unless skipping them would leave nothing to roll at all.
  */
-export function pickCard(guildId: string, minRarity?: db.Card["rarity"], exclude: Iterable<number> = [], skipTiers: db.Card["rarity"][] = []): db.Card | null {
+export function pickCard(guildId: string, minRarity?: db.Card["rarity"], exclude: Iterable<number> = [], maxRarity?: db.Card["rarity"]): db.Card | null {
   const scope = ROLL_ONLY_UNCLAIMED ? guildId : undefined;
   const skip = new Set(exclude);
-  const fresh = weightedPick(scope, minRarity, skip, skipTiers);
+  const fresh = weightedPick(scope, minRarity, skip, maxRarity);
   if (fresh || !skip.size) return fresh;
-  return weightedPick(scope, minRarity, new Set(), skipTiers); // nothing new left, repeats are allowed again
+  return weightedPick(scope, minRarity, new Set(), maxRarity); // nothing new left, repeats are allowed again
 }
 
 /**
@@ -336,7 +337,7 @@ function scheduleRush(guildId: string): void {
 async function dropRush(guildId: string): Promise<void> {
   try {
     const channelId = db.getLastChannel(guildId); // no activity yet -> nowhere to drop
-    const card = channelId ? pickCard(guildId, RUSH_MIN_RARITY, [], SECRET_RARITIES) : null; // secrets are earned by rolling, never dropped free
+    const card = channelId ? pickCard(guildId, RUSH_MIN_RARITY, [], RUSH_MAX_RARITY) : null;
     if (channelId && card) {
       const channel = await client.channels.fetch(channelId);
       if (channel?.isSendable()) {

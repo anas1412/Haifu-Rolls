@@ -274,14 +274,12 @@ test("rolls refill in shared 2h windows; the claim is a 3h cooldown from your ow
   expect(db.secondsUntilClaim(g, "fresh")).toBe(0);        // someone else's claim does not lock you
 });
 
-test("rush drops are أسطورية or better and never a secret tier", async () => {
+test("rush drops are only مميزة or نادرة", async () => {
   const { pickCard } = await import("./index");
-  const { RUSH_MIN_RARITY, RARITY_ORDER, SECRET_RARITIES } = await import("./config");
-  db.addCard("rush-secret.jpg", "سر الدروب", "كيرك", "d");
-  const floor = RARITY_ORDER.indexOf(RUSH_MIN_RARITY);
-  for (let n = 0; n < 500; n++) {
-    const card = pickCard("rush-guild", RUSH_MIN_RARITY, [], SECRET_RARITIES)!;
-    expect(RARITY_ORDER.indexOf(card.rarity)).toBeGreaterThanOrEqual(floor);
-    expect(SECRET_RARITIES).not.toContain(card.rarity);
-  }
+  const { RUSH_MIN_RARITY, RUSH_MAX_RARITY } = await import("./config");
+  db.addCard("rush-low.jpg", "عادي الدروب", "عادية", "d");   // below the range
+  db.addCard("rush-high.jpg", "سر الدروب", "كيرك", "d");      // above it
+  const seen = new Set<string>();
+  for (let n = 0; n < 500; n++) seen.add(pickCard("rush-guild", RUSH_MIN_RARITY, [], RUSH_MAX_RARITY)!.rarity);
+  expect([...seen].sort()).toEqual(["مميزة", "نادرة"].sort()); // both colours show up, nothing else does
 });
