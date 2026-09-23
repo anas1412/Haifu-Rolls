@@ -34,7 +34,7 @@ export const ROLL_ONLY_UNCLAIMED = true; // true: /roll only shows cards nobody 
 // First to press the button keeps it, for free, and it never expires.
 export const RUSH_MIN_HOURS = 2;   // shortest wait between drops
 export const RUSH_MAX_HOURS = 6;   // longest wait between drops
-export const RUSH_MIN_RARITY: Rarity = "نادرة"; // drops are never worse than this
+export const RUSH_MIN_RARITY: Rarity = "أسطورية"; // drops are never worse than this. Secret tiers never drop
 
 // Duel: stake one of your cards against someone else's. A coin flip decides; winner takes both.
 // Stakes are free on purpose, so a newcomer can win big. The defender has to accept, which is the safeguard.

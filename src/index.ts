@@ -110,9 +110,10 @@ function cardFiles(card: db.Card): AttachmentBuilder[] {
 }
 
 /** Weighted pick across the tiers that still have a candidate once `skip` is removed. */
-function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>): db.Card | null {
+function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>, skipTiers: db.Card["rarity"][]): db.Card | null {
   const floor = minRarity ? RARITY_ORDER.indexOf(minRarity) : 0;
   const tiers = RARITY_ORDER.slice(floor)
+    .filter((tier) => !skipTiers.includes(tier))
     .map((tier) => ({ tier, cards: db.cardsInRarity(tier, scope).filter((c) => !skip.has(c.id)) }))
     .filter((t) => t.cards.length);
   if (!tiers.length) return null;
@@ -129,12 +130,12 @@ function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | 
  * Pick a card to show. `exclude` holds cards the player has already seen today: they are skipped
  * so the same card is not rolled twice, unless skipping them would leave nothing to roll at all.
  */
-export function pickCard(guildId: string, minRarity?: db.Card["rarity"], exclude: Iterable<number> = []): db.Card | null {
+export function pickCard(guildId: string, minRarity?: db.Card["rarity"], exclude: Iterable<number> = [], skipTiers: db.Card["rarity"][] = []): db.Card | null {
   const scope = ROLL_ONLY_UNCLAIMED ? guildId : undefined;
   const skip = new Set(exclude);
-  const fresh = weightedPick(scope, minRarity, skip);
+  const fresh = weightedPick(scope, minRarity, skip, skipTiers);
   if (fresh || !skip.size) return fresh;
-  return weightedPick(scope, minRarity, new Set()); // nothing new left, repeats are allowed again
+  return weightedPick(scope, minRarity, new Set(), skipTiers); // nothing new left, repeats are allowed again
 }
 
 /**
@@ -335,7 +336,7 @@ function scheduleRush(guildId: string): void {
 async function dropRush(guildId: string): Promise<void> {
   try {
     const channelId = db.getLastChannel(guildId); // no activity yet -> nowhere to drop
-    const card = channelId ? pickCard(guildId, RUSH_MIN_RARITY) : null;
+    const card = channelId ? pickCard(guildId, RUSH_MIN_RARITY, [], SECRET_RARITIES) : null; // secrets are earned by rolling, never dropped free
     if (channelId && card) {
       const channel = await client.channels.fetch(channelId);
       if (channel?.isSendable()) {

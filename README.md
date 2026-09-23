@@ -38,7 +38,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | 🟣 أسطورية | 6% | 20 |
 | 👑 الملكة | 2% | 50 |
 
-**Card Rush:** every 2-6 hours the bot drops a card in the channel it was last used in. It is نادرة or better,
+**Card Rush:** every 2-6 hours the bot drops a card in the channel it was last used in. It is أسطورية or better (secret tiers never drop),
 costs nothing, never expires, and the first person to press the button keeps it. Late joiners catch up here.
 Tune it with `RUSH_MIN_HOURS`, `RUSH_MAX_HOURS`, and `RUSH_MIN_RARITY` in `config.ts`.
 

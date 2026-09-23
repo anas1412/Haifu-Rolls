@@ -273,3 +273,15 @@ test("rolls refill in shared 2h windows; the claim is a 3h cooldown from your ow
   expect(wait).toBeLessThanOrEqual(3 * 3600);
   expect(db.secondsUntilClaim(g, "fresh")).toBe(0);        // someone else's claim does not lock you
 });
+
+test("rush drops are أسطورية or better and never a secret tier", async () => {
+  const { pickCard } = await import("./index");
+  const { RUSH_MIN_RARITY, RARITY_ORDER, SECRET_RARITIES } = await import("./config");
+  db.addCard("rush-secret.jpg", "سر الدروب", "كيرك", "d");
+  const floor = RARITY_ORDER.indexOf(RUSH_MIN_RARITY);
+  for (let n = 0; n < 500; n++) {
+    const card = pickCard("rush-guild", RUSH_MIN_RARITY, [], SECRET_RARITIES)!;
+    expect(RARITY_ORDER.indexOf(card.rarity)).toBeGreaterThanOrEqual(floor);
+    expect(SECRET_RARITIES).not.toContain(card.rarity);
+  }
+});
