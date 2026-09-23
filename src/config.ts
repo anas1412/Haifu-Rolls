@@ -12,7 +12,7 @@ export const RARITIES: Record<Rarity, { weight: number; points: number; emoji: s
   "أسطورية": { weight: 6,  points: 20, emoji: "🟣", color: 0x9b59b6 },
   "الملكة":  { weight: 2,  points: 50, emoji: "👑", color: 0xf1c40f },
   "المنتخب": { weight: 1,  points: 100, emoji: "⚽", color: 0x000000 }, // sports / black-shirt shots only
-  "كيرك":    { weight: 0.5, points: 300, emoji: "🩷", color: 0xff69b4 }, // the Kirkified meme, rarest of all
+  "كيرك":    { weight: 0.5, points: 910, emoji: "🩷", color: 0xff69b4 }, // the Kirkified meme, rarest of all
 };
 export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
 
