@@ -1,6 +1,6 @@
 // Game settings. Edit freely.
 
-export type Rarity = "عادية" | "مميزة" | "نادرة" | "أسطورية" | "الملكة" | "المنتخب";
+export type Rarity = "عادية" | "مميزة" | "نادرة" | "أسطورية" | "الملكة" | "المنتخب" | "كيرك";
 
 // Rarity tiers, lowest to highest.
 // weight = how often /roll lands on this tier (relative)
@@ -12,6 +12,7 @@ export const RARITIES: Record<Rarity, { weight: number; points: number; emoji: s
   "أسطورية": { weight: 6,  points: 20, emoji: "🟣", color: 0x9b59b6 },
   "الملكة":  { weight: 2,  points: 50, emoji: "👑", color: 0xf1c40f },
   "المنتخب": { weight: 1,  points: 100, emoji: "⚽", color: 0x000000 }, // sports / black-shirt shots only
+  "كيرك":    { weight: 0.5, points: 300, emoji: "🩷", color: 0xff69b4 }, // the Kirkified meme, rarest of all
 };
 export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
 
@@ -19,7 +20,7 @@ export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
  * Tiers that exist but are never named in public listings like /deck. Their cards still count
  * in totals, so the numbers stay truthful; the tier just is not advertised.
  */
-export const SECRET_RARITIES: Rarity[] = ["المنتخب"];
+export const SECRET_RARITIES: Rarity[] = ["المنتخب", "كيرك"];
 
 export const ROLLS_PER_DAY = 3;          // rolls each player gets per day
 // One claim per player per day (fixed).
