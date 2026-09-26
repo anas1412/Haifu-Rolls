@@ -30,13 +30,17 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 
 ## Rarity
 
-| Tier | Roll chance | Points |
+| Tier | One card is this much rarer than a common | Points |
 |---|---|---|
-| ⚪ عادية | 50% | 1 |
-| 🟢 مميزة | 28% | 3 |
-| 🔵 نادرة | 14% | 8 |
-| 🟣 أسطورية | 6% | 20 |
-| 👑 الملكة | 2% | 50 |
+| ⚪ عادية | 1× | 1 |
+| 🟢 مميزة | 2× | 2 |
+| 🔵 نادرة | 4× | 4 |
+| 🟣 أسطورية | 10× | 10 |
+| 👑 الملكة | 25× | 25 |
+
+Rarity is per card: a tier's share of rolls is its weight times how many of its cards are still
+unclaimed, so rare cards surface more often as the common ones run out. Points mirror rarity
+(`points = 100 / weight`), so a card twice as hard to get is worth twice as much.
 
 **Card Rush:** every 2-6 hours the bot drops a card in the channel it was last used in. It is always مميزة or نادرة,
 costs nothing, never expires, and the first person to press the button keeps it. Late joiners catch up here.

@@ -24,15 +24,15 @@ test("a fresh server starts on season 1", () => {
 });
 
 test("season 1 closes when the last card is taken and pays 5/4/3", () => {
-  db.claimFree(G, card["ك1"]!, A); // 50
-  db.claimFree(G, card["ن1"]!, B); // 8
-  db.claimFree(G, card["م1"]!, B); // +3 = 11
-  db.claimFree(G, card["م2"]!, C); // 3
+  db.claimFree(G, card["ك1"]!, A); // 25
+  db.claimFree(G, card["ن1"]!, B); // 4
+  db.claimFree(G, card["م1"]!, B); // +2 = 6
+  db.claimFree(G, card["م2"]!, C); // 2
   db.claimFree(G, card["ع1"]!, C); // +1
-  db.claimFree(G, card["ع2"]!, C); // +1 = 5
+  db.claimFree(G, card["ع2"]!, C); // +1 = 4
 
   expect(Object.values(db.poolCounts(G)).every((n) => !n)).toBe(true);
-  expect([totalPoints(1, A), totalPoints(1, B), totalPoints(1, C)]).toEqual([50, 11, 5]);
+  expect([totalPoints(1, A), totalPoints(1, B), totalPoints(1, C)]).toEqual([25, 6, 4]);
   expect(db.closeSeason(G)).toEqual([
     { userId: A, place: 1, points: 5 },
     { userId: B, place: 2, points: 4 },
@@ -45,16 +45,16 @@ test("the new season frees every card but keeps the old one readable", () => {
   expect(Object.values(db.poolCounts(G)).reduce((a, b) => a + (b ?? 0), 0)).toBe(6);
   expect(db.collection(G, A)).toHaveLength(0);
   expect(db.collection(G, A, 1)).toHaveLength(1); // archived, not deleted
-  expect(totalPoints(1, A)).toBe(50);
+  expect(totalPoints(1, A)).toBe(25);
 });
 
 test("all-time medals accumulate across seasons and never reset", () => {
-  db.claimFree(G, card["ك1"]!, C); // 50
+  db.claimFree(G, card["ك1"]!, C); // 25
   db.claimFree(G, card["ن1"]!, A);
-  db.claimFree(G, card["م1"]!, A); // 11
+  db.claimFree(G, card["م1"]!, A); // 6
   db.claimFree(G, card["م2"]!, B);
   db.claimFree(G, card["ع1"]!, B);
-  db.claimFree(G, card["ع2"]!, B); // 5
+  db.claimFree(G, card["ع2"]!, B); // 4
   expect(db.closeSeason(G)).toEqual([
     { userId: C, place: 1, points: 5 },
     { userId: A, place: 2, points: 4 },
@@ -68,8 +68,8 @@ test("all-time medals accumulate across seasons and never reset", () => {
 
 test("a points tie goes to whoever holds more cards", () => {
   const G2 = "9876543210987654321";
-  const one = db.addCard("t0.jpg", "ت0", "مميزة", "d"); // 3 points in one card
-  const many = ["ت1", "ت2", "ت3"].map((n) => db.addCard(`${n}.jpg`, n, "عادية", "d")); // 3 points in three
+  const one = db.addCard("t0.jpg", "ت0", "مميزة", "d"); // 2 points in one card
+  const many = ["ت1", "ت2"].map((n) => db.addCard(`${n}.jpg`, n, "عادية", "d")); // 2 points in two
   db.claimFree(G2, one, A);
   for (const c of many) db.claimFree(G2, c, B);
 
@@ -246,7 +246,7 @@ test("a huge stake still fits inside a Discord embed field", async () => {
   const rendered = ar(stakeBlock(many)); // ar() is what actually reaches Discord
   expect(rendered.length).toBeLessThan(1024); // Discord rejects the whole message past this
   expect(rendered).toContain("100 كرت");      // the total still counts every card
-  expect(rendered).toContain("5000 نقطة");    // 100 queens
+  expect(rendered).toContain("2500 نقطة");    // 100 queens
   expect(rendered).toContain("كرت آخر");      // the rest are summarised, not listed
 
   // The duel embeds put BOTH stakes in a single "على المحك" field, and the spoils of a duel are
@@ -282,4 +282,24 @@ test("rush drops are only مميزة or نادرة", async () => {
   const seen = new Set<string>();
   for (let n = 0; n < 500; n++) seen.add(pickCard("rush-guild", RUSH_MIN_RARITY, [], RUSH_MAX_RARITY)!.rarity);
   expect([...seen].sort()).toEqual(["مميزة", "نادرة"].sort()); // both colours show up, nothing else does
+});
+
+test("rarity is per card: a big tier cannot drown out a small one, and value mirrors rarity", async () => {
+  const { pickCard } = await import("./index");
+  const { RARITIES } = await import("./config");
+  for (const r of Object.values(RARITIES)) expect(r.points * r.weight).toBe(100); // points = 100 / weight
+
+  // One queen next to 20 commons. Per card that is 4 vs 20 x 100, so the queen lands ~0.2% of rolls.
+  // Under the old per-tier weights (2 vs 50) the lone queen took her whole tier's share: ~3.8%.
+  const g = "per-card-guild";
+  const queen = db.addCard("pc-q.jpg", "ملكة وحيدة", "الملكة", "d");
+  const commons = Array.from({ length: 20 }, (_, n) => db.addCard(`pc-${n}.jpg`, `عادي ${n}`, "عادية", "d"));
+  // claim everything else in the deck for this guild, so only our 26 cards can be rolled
+  const ours = new Set([queen, ...commons]);
+  for (const c of db.cardsInRarity("عادية").concat(...(["مميزة", "نادرة", "أسطورية", "الملكة", "المنتخب", "كيرك"] as const).map((t) => db.cardsInRarity(t)))) {
+    if (!ours.has(c.id)) db.claimFree(g, c.id, "filler");
+  }
+  let hits = 0;
+  for (let n = 0; n < 3000; n++) if (pickCard(g)!.id === queen) hits++;
+  expect(hits).toBeLessThan(30); // ~6 expected per card; the old per-tier maths would give ~115
 });

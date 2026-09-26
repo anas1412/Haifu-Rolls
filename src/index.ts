@@ -110,7 +110,7 @@ function cardFiles(card: db.Card): AttachmentBuilder[] {
   return IMAGE_BASE_URL ? [] : [new AttachmentBuilder(join(IMAGES_DIR, card.file), { name: card.file })];
 }
 
-/** Weighted pick across the tiers that still have a candidate once `skip` is removed. */
+/** Weighted pick across the tiers that still have a candidate once `skip` is removed. Weights are per card. */
 function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>, maxRarity: db.Card["rarity"] | undefined): db.Card | null {
   const floor = minRarity ? RARITY_ORDER.indexOf(minRarity) : 0;
   const ceiling = maxRarity ? RARITY_ORDER.indexOf(maxRarity) + 1 : RARITY_ORDER.length;
@@ -118,10 +118,11 @@ function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | 
     .map((tier) => ({ tier, cards: db.cardsInRarity(tier, scope).filter((c) => !skip.has(c.id)) }))
     .filter((t) => t.cards.length);
   if (!tiers.length) return null;
-  let roll = Math.random() * tiers.reduce((sum, t) => sum + RARITIES[t.tier].weight, 0);
+  const share = (t: (typeof tiers)[number]) => RARITIES[t.tier].weight * t.cards.length;
+  let roll = Math.random() * tiers.reduce((sum, t) => sum + share(t), 0);
   let chosen = tiers[tiers.length - 1]!;
   for (const t of tiers) {
-    roll -= RARITIES[t.tier].weight;
+    roll -= share(t);
     if (roll < 0) { chosen = t; break; }
   }
   return chosen.cards[Math.floor(Math.random() * chosen.cards.length)]!;

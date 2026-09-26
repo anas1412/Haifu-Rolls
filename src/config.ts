@@ -3,16 +3,17 @@
 export type Rarity = "عادية" | "مميزة" | "نادرة" | "أسطورية" | "الملكة" | "المنتخب" | "كيرك";
 
 // Rarity tiers, lowest to highest.
-// weight = how often /roll lands on this tier (relative)
-// points = score in /top
+// weight = how likely ONE card of this tier is to be rolled, relative to the others. A tier's share
+//          of rolls is weight x its unclaimed cards, so a tier with few cards stays genuinely rare.
+// points = score in /top. Kept at 100 / weight, so a card twice as hard to get is worth twice as much.
 export const RARITIES: Record<Rarity, { weight: number; points: number; emoji: string; color: number }> = {
-  "عادية":   { weight: 50, points: 1,  emoji: "⚪", color: 0x95a5a6 },
-  "مميزة":   { weight: 28, points: 3,  emoji: "🟢", color: 0x2ecc71 },
-  "نادرة":   { weight: 14, points: 8,  emoji: "🔵", color: 0x3498db },
-  "أسطورية": { weight: 6,  points: 20, emoji: "🟣", color: 0x9b59b6 },
-  "الملكة":  { weight: 2,  points: 50, emoji: "👑", color: 0xf1c40f },
-  "المنتخب": { weight: 1,  points: 100, emoji: "⚽", color: 0x000000 }, // sports / black-shirt shots only
-  "كيرك":    { weight: 0.5, points: 910, emoji: "🩷", color: 0xff69b4 }, // the Kirkified meme, rarest of all
+  "عادية":   { weight: 100, points: 1,   emoji: "⚪", color: 0x95a5a6 },
+  "مميزة":   { weight: 50,  points: 2,   emoji: "🟢", color: 0x2ecc71 },
+  "نادرة":   { weight: 25,  points: 4,   emoji: "🔵", color: 0x3498db },
+  "أسطورية": { weight: 10,  points: 10,  emoji: "🟣", color: 0x9b59b6 },
+  "الملكة":  { weight: 4,   points: 25,  emoji: "👑", color: 0xf1c40f },
+  "المنتخب": { weight: 2,   points: 50,  emoji: "⚽", color: 0x000000 }, // sports / black-shirt shots only
+  "كيرك":    { weight: 1,   points: 100, emoji: "🩷", color: 0xff69b4 }, // the Kirkified meme, rarest of all
 };
 export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
 
