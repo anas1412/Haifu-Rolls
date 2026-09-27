@@ -388,7 +388,7 @@ export function seasonEndMessage(
       { name: "اللاعبين", value: `${standings.length}`, inline: true },
     )
     .setColor(COLOR.gold)
-    .setFooter({ text: `الموسم ${season + 1} بدأ · كل الكروت متاحة من جديد · /leaderboard للترتيب العام` });
+    .setFooter({ text: `الموسم ${season + 1} بدأ · كل الكروت متاحة من جديد · الرميّات والطلب تجدّدو للجميع · /leaderboard للترتيب العام` });
   return {
     // @everyone on its own line: nothing Arabic around it to reorder, and the ping stays a clean pill
     content: `${ar(`🏁 انتهى الموسم ${season}! هاو الترتيب 👇`)}\n@everyone`,

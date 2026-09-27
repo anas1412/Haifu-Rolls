@@ -167,6 +167,7 @@ export const MEDAL_POINTS = [5, 4, 3, 2, 1];
 /**
  * Close the live season: award medals to the top five and archive them.
  * Claims are kept, so past collections stay readable; the next season simply ignores them.
+ * Everyone's rolls and claim cooldown reset for the new season.
  */
 export function closeSeason(guildId: string): { userId: string; place: number; points: number }[] {
   const season = currentSeason(guildId);
@@ -179,6 +180,9 @@ export function closeSeason(guildId: string): { userId: string; place: number; p
   const insert = db.query("INSERT OR REPLACE INTO season_medals (guild_id, season, user_id, place, points) VALUES (?, ?, ?, ?, ?)");
   db.transaction(() => {
     for (const m of medals) insert.run(guildId, season, m.userId, m.place, m.points);
+    // A new season starts everyone level: full rolls and a claim ready, whatever they used before.
+    db.query("DELETE FROM rolls WHERE guild_id = ?").run(guildId);
+    db.query("DELETE FROM last_claim WHERE guild_id = ?").run(guildId);
   })();
   return medals;
 }

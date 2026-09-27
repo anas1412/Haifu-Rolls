@@ -123,6 +123,7 @@ A season runs until the **last unclaimed card in that server is taken**. Then:
 
 - The top five get permanent medal points: **5, 4, 3, 2, 1**.
 - The bot posts the full ranking, tags every player and @everyone, and the next season opens with every card rollable again.
+- Everyone in that server gets their rolls and claim back straight away.
 - Old claims are **archived, not deleted**, so past standings and collections stay readable.
 
 Seasons are per server, so one server can be on season 3 while another is still on season 1.

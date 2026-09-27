@@ -303,3 +303,19 @@ test("rarity is per card: a big tier cannot drown out a small one, and value mir
   for (let n = 0; n < 3000; n++) if (pickCard(g)!.id === queen) hits++;
   expect(hits).toBeLessThan(30); // ~6 expected per card; the old per-tier maths would give ~115
 });
+
+test("closing a season gives everyone fresh rolls and a claim, in that server only", () => {
+  const g = "reset-guild", other = "reset-other";
+  const card = db.addCard("rs.jpg", "كرت الريست", "عادية", "d");
+  db.claim(g, card, "p1");                 // p1 is now on claim cooldown
+  db.recordRoll(g, "p1", card);
+  db.recordRoll(other, "p1", card);        // same player, another server
+  expect(db.rollsUsed(g, "p1")).toBe(1);
+  expect(db.secondsUntilClaim(g, "p1")).toBeGreaterThan(0);
+
+  db.closeSeason(g);
+  expect(db.rollsUsed(g, "p1")).toBe(0);
+  expect(db.cardsRolledThisWindow(g, "p1")).toEqual([]);
+  expect(db.secondsUntilClaim(g, "p1")).toBe(0);
+  expect(db.rollsUsed(other, "p1")).toBe(1); // the other server's limits are untouched
+});
