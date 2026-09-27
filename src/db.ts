@@ -4,7 +4,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { CLAIM_COOLDOWN_HOURS, DB_PATH, MEDAL_POINTS, RARITIES, ROLL_RESET_HOURS, type Rarity } from "./config";
+import { DB_PATH, MEDAL_POINTS, RARITIES, ROLL_RESET_HOURS, type Rarity } from "./config";
 
 export interface Card {
   id: number;
@@ -70,6 +70,7 @@ export function init(): void {
       guild_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
       claimed_at REAL NOT NULL,
+      cooldown REAL NOT NULL DEFAULT 10800,
       PRIMARY KEY (guild_id, user_id)
     );
     CREATE TABLE IF NOT EXISTS guild_channel (
@@ -79,6 +80,7 @@ export function init(): void {
   `);
   migrate();
   migrateRolls();
+  migrateClaimCooldown();
   dropDuelsTable();
 }
 
@@ -109,6 +111,17 @@ function migrate(): void {
 /** Duels used to be capped per day. The tracking table is no longer read, so let it go. */
 function dropDuelsTable(): void {
   db.exec("DROP TABLE IF EXISTS duels");
+}
+
+/**
+ * The wait after a claim used to be one fixed 3 hours. It now depends on the card, so each claim stores
+ * its own wait. Claims made before this keep the 3 hours they were made under.
+ */
+function migrateClaimCooldown(): void {
+  const cols = db.query<{ name: string }, []>("PRAGMA table_info(last_claim)").all().map((c) => c.name);
+  if (cols.includes("cooldown")) return;
+  db.exec("ALTER TABLE last_claim ADD COLUMN cooldown REAL NOT NULL DEFAULT 10800");
+  console.log("migrated last_claim: the wait after a claim now depends on the card");
 }
 
 function migrateRolls(): void {
@@ -337,7 +350,9 @@ export function claim(guildId: string, cardId: number, userId: string): boolean 
   } catch {
     return false;
   }
-  db.query("INSERT OR REPLACE INTO last_claim (guild_id, user_id, claimed_at) VALUES (?, ?, ?)").run(guildId, userId, now());
+  const rarity = getCard(cardId)?.rarity;
+  const cooldown = (rarity ? RARITIES[rarity].claimHours : 1) * 3600; // rarer card, longer wait
+  db.query("INSERT OR REPLACE INTO last_claim (guild_id, user_id, claimed_at, cooldown) VALUES (?, ?, ?, ?)").run(guildId, userId, now(), cooldown);
   return true;
 }
 
@@ -466,7 +481,7 @@ export function awardDuel(guildId: string, cardsA: number[], userA: string, card
 /** 0 when the player may claim now, otherwise how long until they can. */
 export function secondsUntilClaim(guildId: string, userId: string): number {
   const row = db
-    .query<{ claimed_at: number }, [string, string]>("SELECT claimed_at FROM last_claim WHERE guild_id = ? AND user_id = ?")
+    .query<{ claimed_at: number; cooldown: number }, [string, string]>("SELECT claimed_at, cooldown FROM last_claim WHERE guild_id = ? AND user_id = ?")
     .get(guildId, userId);
-  return row ? Math.max(0, row.claimed_at + CLAIM_COOLDOWN_HOURS * 3600 - now()) : 0;
+  return row ? Math.max(0, row.claimed_at + row.cooldown - now()) : 0;
 }

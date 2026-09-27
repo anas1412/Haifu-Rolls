@@ -154,9 +154,10 @@ const callerName = (i: ChatInputCommandInteraction): string => memberName(i.memb
 const optionName = (i: ChatInputCommandInteraction, option: string, user: User): string =>
   memberName(i.options.getMember(option) as MemberLike, user);
 
-function fmtWait(seconds: number): string {
+export function fmtWait(seconds: number): string {
   const m = Math.max(1, Math.ceil(seconds / 60)); // never "0 د" while something is still locked
-  return m >= 60 ? `${Math.floor(m / 60)} س ${m % 60} د` : `${m} د`;
+  if (m < 60) return `${m} د`;
+  return m % 60 ? `${Math.floor(m / 60)} س ${m % 60} د` : `${m / 60} س`; // "3 س", not "3 س 0 د"
 }
 
 function claimRow(cardId: number, expiresAt: number, disabled = false) {
@@ -805,7 +806,7 @@ async function handleButton(i: ButtonInteraction) {
     const embed = cardEmbed(card, uid);
     if (footer) embed.setFooter({ text: footer });
     await i.update({ embeds: [embed], components: [claimRow(cardId, expiresAt, true)] });
-    await i.followUp(note(`💍 ${i.user} حصل على **${card.name}**!`, COLOR.ok));
+    await i.followUp(note(`💍 ${i.user} حصل على **${card.name}**!\nطلبو الجاي بعد ${fmtWait(db.secondsUntilClaim(gid, uid))}`, COLOR.ok));
     return void (await checkSeasonEnd(gid));
   }
 

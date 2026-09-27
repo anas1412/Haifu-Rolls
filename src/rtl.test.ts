@@ -73,3 +73,13 @@ test("the season-end post tags everyone and every player, right to left", async 
   expect(lines[4]).toContain("+1 نقطة دائمة");
   expect(lines.some((l) => l.includes("6️⃣ <@666666666666666666>"))).toBe(true); // 6th listed, no medal
 });
+
+test("waits read naturally: no zero minutes on whole hours", async () => {
+  const { fmtWait } = await import("./index");
+  expect(fmtWait(3600)).toBe("1 س");
+  expect(fmtWait(3 * 3600 - 1)).toBe("3 س");     // a second short of 3 hours rounds up, and reads clean
+  expect(fmtWait(5 * 3600)).toBe("5 س");
+  expect(fmtWait(2 * 3600 + 14 * 60)).toBe("2 س 14 د");
+  expect(fmtWait(45 * 60)).toBe("45 د");
+  expect(fmtWait(10)).toBe("1 د");               // never "0 د" while still waiting
+});

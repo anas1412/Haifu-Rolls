@@ -257,7 +257,7 @@ test("a huge stake still fits inside a Discord embed field", async () => {
   expect(ar(stakeBlock([...many, ...many])).length).toBeLessThan(1024);
 });
 
-test("rolls refill in shared 2h windows; the claim is a 3h cooldown from your own claim", () => {
+test("rolls refill in shared 2h windows; the claim is a cooldown from your own claim", () => {
   const start = db.rollWindowStart(), nowS = Date.now() / 1000;
   const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
   expect(start).toBeLessThanOrEqual(nowS);
@@ -269,8 +269,8 @@ test("rolls refill in shared 2h windows; the claim is a 3h cooldown from your ow
   expect(db.secondsUntilClaim(g, "fresh")).toBe(0);        // never claimed: free to claim
   db.claim(g, card, "claimer");
   const wait = db.secondsUntilClaim(g, "claimer");
-  expect(wait).toBeGreaterThan(3 * 3600 - 5);              // just claimed: about 3 hours to go
-  expect(wait).toBeLessThanOrEqual(3 * 3600);
+  expect(wait).toBeGreaterThan(3600 - 5);                  // just claimed a common: about an hour to go
+  expect(wait).toBeLessThanOrEqual(3600);
   expect(db.secondsUntilClaim(g, "fresh")).toBe(0);        // someone else's claim does not lock you
 });
 
@@ -318,4 +318,16 @@ test("closing a season gives everyone fresh rolls and a claim, in that server on
   expect(db.cardsRolledThisWindow(g, "p1")).toEqual([]);
   expect(db.secondsUntilClaim(g, "p1")).toBe(0);
   expect(db.rollsUsed(other, "p1")).toBe(1); // the other server's limits are untouched
+});
+
+test("the wait after a claim depends on the card: 1h common to rare, 3h legendary and queen, 5h secret", () => {
+  const g = "cooldown-tiers";
+  const hoursFor = (rarity: Parameters<typeof db.addCard>[2], n: number) => {
+    const card = db.addCard(`cd-${rarity}-${n}.jpg`, `انتظار ${rarity} ${n}`, rarity, "d");
+    db.claim(g, card, `p-${rarity}`);
+    return Math.round(db.secondsUntilClaim(g, `p-${rarity}`) / 3600);
+  };
+  expect([hoursFor("عادية", 1), hoursFor("مميزة", 1), hoursFor("نادرة", 1)]).toEqual([1, 1, 1]);
+  expect([hoursFor("أسطورية", 1), hoursFor("الملكة", 1)]).toEqual([3, 3]);
+  expect([hoursFor("المنتخب", 1), hoursFor("كيرك", 1)]).toEqual([5, 5]);
 });

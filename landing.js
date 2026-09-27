@@ -1,16 +1,17 @@
 // Haifu Rolls landing page. Plain JavaScript, no framework and no build step.
 // The deck comes straight from seed.json in this repo, so new cards show up here on their own.
 
-// Public tiers, rarest last. Mirrors RARITIES in src/config.ts (weight is per card; points = 100 / weight).
+// Public tiers, rarest last. Mirrors RARITIES in src/config.ts (weight is per card; points = 100 / weight;
+// claimHours = the wait before your next claim after claiming one).
 // The secret tiers are left out on purpose: the page never names or rolls them.
 const TIERS = [
-  { key: "عادية", weight: 100, points: 1, color: "#95a5a6" },
-  { key: "مميزة", weight: 50, points: 2, color: "#2ecc71" },
-  { key: "نادرة", weight: 25, points: 4, color: "#3498db" },
-  { key: "أسطورية", weight: 10, points: 10, color: "#9b59b6" },
-  { key: "الملكة", weight: 4, points: 25, color: "#f1c40f" },
+  { key: "عادية", weight: 100, points: 1, claimHours: 1, color: "#95a5a6" },
+  { key: "مميزة", weight: 50, points: 2, claimHours: 1, color: "#2ecc71" },
+  { key: "نادرة", weight: 25, points: 4, claimHours: 1, color: "#3498db" },
+  { key: "أسطورية", weight: 10, points: 10, claimHours: 3, color: "#9b59b6" },
+  { key: "الملكة", weight: 4, points: 25, claimHours: 3, color: "#f1c40f" },
 ];
-const RULES = { rolls: 5, rollResetHours: 2, claimCooldownHours: 3, claimWindowSeconds: 30 };
+const RULES = { rolls: 5, rollResetHours: 2, claimWindowSeconds: 30 };
 const SHOWCASE = "h52.jpg"; // الهاربة مالمتحف, the card shown before the first roll
 
 const tierOf = (key) => TIERS.find((t) => t.key === key);
@@ -63,7 +64,7 @@ function rollDemo(deck) {
 
   let state;
   function reset() {
-    state = { left: RULES.rolls, rolled: null, claimedOne: false, seen: new Set([SHOWCASE]), spinning: false };
+    state = { left: RULES.rolls, rolled: null, claimed: null, seen: new Set([SHOWCASE]), spinning: false };
     show(deck.find((c) => c.file === SHOWCASE) || deck[0]);
     buttons.hidden = true;
     field("owner").textContent = "متاحة";
@@ -149,16 +150,18 @@ function rollDemo(deck) {
   function claim() {
     const r = state.rolled;
     if (!r || r.claimed || Date.now() >= r.expiresAt) return;
-    if (state.claimedOne) {
-      status.textContent = `عندك طلب واحد كل ${hours(RULES.claimCooldownHours)}، وستعملتو. خلّيها لغيرك.`;
+    if (state.claimed) {
+      const t = tierOf(state.claimed.rarity);
+      status.textContent = `طلبت ${t.key} توّا، تستنى ${hours(t.claimHours)} قبل الطلب الجاي. خلّيها لغيرك.`;
       return;
     }
     r.claimed = true;
-    state.claimedOne = true;
+    state.claimed = r.card;
     clearTimeout(r.tick);
     paintClaim();
     field("owner").textContent = "إنتي";
-    status.textContent = `${r.card.name} ولّات متاعك، وزادتك ${points(tierOf(r.card.rarity).points)} في الترتيب.`;
+    const t = tierOf(r.card.rarity);
+    status.textContent = `${r.card.name} ولّات متاعك، وزادتك ${points(t.points)}. طلبك الجاي بعد ${hours(t.claimHours)}.`;
   }
 
   rollBtn.addEventListener("click", roll);
@@ -181,6 +184,7 @@ function rarity(deck) {
     panel.querySelector(".tier-rule").textContent =
       rarer === 1 ? "الدرجة الأساسية، واللي تطلع أكثر من غيرها." : `كل كرت منها أندر من العادية بـ${times(rarer)}.`;
     panel.querySelector(".pts").textContent = points(t.points);
+    panel.querySelector(".tier-wait").textContent = `كي تطلبها، تستنى ${hours(t.claimHours)} قبل الطلب الجاي.`;
     list.replaceChildren(...sample(deck.filter((c) => c.rarity === active), 5).map((c) => {
       const li = document.createElement("li");
       const pic = Object.assign(document.createElement("img"), { src: img(c.file), alt: "", loading: "lazy" });

@@ -6,14 +6,15 @@ export type Rarity = "عادية" | "مميزة" | "نادرة" | "أسطوري�
 // weight = how likely ONE card of this tier is to be rolled, relative to the others. A tier's share
 //          of rolls is weight x its unclaimed cards, so a tier with few cards stays genuinely rare.
 // points = score in /top. Kept at 100 / weight, so a card twice as hard to get is worth twice as much.
-export const RARITIES: Record<Rarity, { weight: number; points: number; emoji: string; color: number }> = {
-  "عادية":   { weight: 100, points: 1,   emoji: "⚪", color: 0x95a5a6 },
-  "مميزة":   { weight: 50,  points: 2,   emoji: "🟢", color: 0x2ecc71 },
-  "نادرة":   { weight: 25,  points: 4,   emoji: "🔵", color: 0x3498db },
-  "أسطورية": { weight: 10,  points: 10,  emoji: "🟣", color: 0x9b59b6 },
-  "الملكة":  { weight: 4,   points: 25,  emoji: "👑", color: 0xf1c40f },
-  "المنتخب": { weight: 2,   points: 50,  emoji: "⚽", color: 0x000000 }, // sports / black-shirt shots only
-  "كيرك":    { weight: 1,   points: 100, emoji: "🩷", color: 0xff69b4 }, // the Kirkified meme, rarest of all
+// claimHours = how long you wait for your next claim after claiming a card of this tier.
+export const RARITIES: Record<Rarity, { weight: number; points: number; claimHours: number; emoji: string; color: number }> = {
+  "عادية":   { weight: 100, points: 1,   claimHours: 1, emoji: "⚪", color: 0x95a5a6 },
+  "مميزة":   { weight: 50,  points: 2,   claimHours: 1, emoji: "🟢", color: 0x2ecc71 },
+  "نادرة":   { weight: 25,  points: 4,   claimHours: 1, emoji: "🔵", color: 0x3498db },
+  "أسطورية": { weight: 10,  points: 10,  claimHours: 3, emoji: "🟣", color: 0x9b59b6 },
+  "الملكة":  { weight: 4,   points: 25,  claimHours: 3, emoji: "👑", color: 0xf1c40f },
+  "المنتخب": { weight: 2,   points: 50,  claimHours: 5, emoji: "⚽", color: 0x000000 }, // sports / black-shirt shots only
+  "كيرك":    { weight: 1,   points: 100, claimHours: 5, emoji: "🩷", color: 0xff69b4 }, // the Kirkified meme, rarest of all
 };
 export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
 
@@ -25,7 +26,7 @@ export const SECRET_RARITIES: Rarity[] = ["المنتخب", "كيرك"];
 
 export const ROLLS_PER_RESET = 5;        // rolls each player gets per window
 export const ROLL_RESET_HOURS = 2;       // rolls refill for everyone together every this many hours (windows start at midnight)
-export const CLAIM_COOLDOWN_HOURS = 3;   // one claim, then wait this long from the moment you claimed
+// One claim at a time: the wait before the next one depends on the card you claimed (claimHours above).
 export const CLAIM_WINDOW_SECONDS = 30;  // how long the claim button stays alive after a roll
 export const EXCHANGE_WINDOW_SECONDS = 300;
 export const COLLECTION_IDLE_SECONDS = 120; // /collection browsing buttons grey out after this long without a click
