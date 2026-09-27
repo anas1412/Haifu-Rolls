@@ -161,7 +161,7 @@ export function Cards({ server, meta, owner, setOwner, onChanged }: {
                   <span className="tile-body">
                     <span className="tile-id">#{c.id}</span>
                     <Name>{c.name}</Name>
-                    <span className="tile-owner">{c.owner ? <><Avatar person={c.owner} size={18} /><Name>{c.owner.name}</Name></> : <span className="muted">Unclaimed</span>}</span>
+                    <span className="tile-owner">{c.owner ? <><Avatar person={c.owner} size={20} /><Name>{c.owner.name}</Name></> : <span className="muted">Unclaimed</span>}</span>
                   </span>
                 </button>
               ) : <span className="tile ghost" />}

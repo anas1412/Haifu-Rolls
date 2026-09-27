@@ -34,9 +34,11 @@ for (const s of servers) {
 }
 
 const nameOf = (id: string) => NAMES[Number(BigInt(id) - 100000000000000000n) % NAMES.length] ?? id;
+// every other player gets a picture, so both the photo and the letter fallback show up
+const avatarOf = (id: string) => (Number(BigInt(id) % 2n) ? null : `/images/h${String((Number(BigInt(id) % 40n)) + 10)}.jpg`);
 const member = (id: string) => ({
-  id, displayName: nameOf(id), user: { bot: false, displayName: nameOf(id), displayAvatarURL: () => null },
-  displayAvatarURL: () => null,
+  id, displayName: nameOf(id), user: { bot: false, displayName: nameOf(id), displayAvatarURL: () => avatarOf(id) },
+  displayAvatarURL: () => avatarOf(id),
 });
 const guild = (s: (typeof servers)[number]) => ({
   name: s.name, memberCount: 40 + s.players * 7, iconURL: () => null,

@@ -168,11 +168,13 @@ button.person:hover .name { text-decoration: underline; text-underline-offset: 3
 .card-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 14px; }
 .tile { display: flex; flex-direction: column; width: 100%; padding: 0; overflow: hidden; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); text-align: left; transition: transform 0.12s, border-color 0.12s; }
 .tile:hover { border-color: var(--rc); transform: translateY(-2px); }
-.tile img { aspect-ratio: 3 / 4; width: 100%; object-fit: cover; background: var(--raised); border-bottom: 3px solid var(--rc); }
-.tile-body { display: flex; flex-direction: column; gap: 2px; padding: 9px 10px 11px; min-width: 0; }
+/* only the card photo: the owner's avatar below is an img too and must stay a small circle */
+.tile > img { aspect-ratio: 3 / 4; width: 100%; object-fit: cover; background: var(--raised); border-bottom: 3px solid var(--rc); }
+/* card and player names are mostly Arabic, so the text under the photo reads right to left */
+.tile-body { display: flex; flex-direction: column; gap: 2px; padding: 9px 10px 11px; min-width: 0; direction: rtl; text-align: right; }
 .tile-body > .name { font-weight: 500; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-id { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); }
-.tile-owner { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; margin-top: 4px; min-width: 0; }
+.tile-id { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); direction: ltr; unicode-bidi: isolate; } /* keeps "#10" from flipping to "10#" */
+.tile-owner { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; margin-top: 6px; min-width: 0; }
 .tile-owner .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile.ghost { aspect-ratio: 3 / 4.6; background: linear-gradient(90deg, var(--panel), var(--raised), var(--panel)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
 .more { display: flex; justify-content: center; margin-top: 22px; }
