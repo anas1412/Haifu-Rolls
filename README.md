@@ -106,16 +106,23 @@ straight **50/50 coin flip** decides it. The winner takes everything staked.
 
 ## Admin dashboard
 
-A web page for managing the game without touching SQL. It only runs when `ADMIN_PASSWORD` is set.
+A React app (`dashboard/`) served by the bot on Railway, for managing the game without touching SQL.
+It only runs when `ADMIN_PASSWORD` is set: add it in the host's variables and open the service's public URL.
 
-- Lists every server, with players, cards claimed, and the season.
-- Per server: every player's collection size and points, and every card with its owner.
-- Filter cards by number or name, by rarity, and by owner (including unclaimed only).
-- Give a card to anyone, or send one back to the pool.
-- End a server's season early. It asks for confirmation and can't fire twice from a resubmitted page.
-- Sign in once; a cookie keeps you signed in on that device for 30 days.
+- Every server in one sidebar, with live bot status (online, ping, uptime).
+- **Overview**: cards claimed this season, cards by rarity, this season's board and the all-time medals.
+- **Cards**: every card with its picture and owner. Filter by number or name, rarity, or owner.
+  Open a card to give it to anyone in the server (search by name, or paste their Discord ID) or send it back to the pool.
+- **Players**: everyone's cards and points; one click shows a player's cards.
+- **Season**: see who would get medals, then end the season. It asks first and can't fire twice.
+- Numbers refresh on their own while the tab is open. Sign in once and stay signed in for 30 days.
 
-Set `ADMIN_PASSWORD` in the host's variables and open the service's public URL.
+Preview it locally with fake data (no Discord needed): `bun run dashboard`, then open http://localhost:3002.
+
+## Website
+
+`index.html`, `landing.css` and `landing.js` at the repo root are the public landing page, a plain static
+site served by GitHub Pages. No build step: edit and push. The demo roll reads the deck from `seed.json`.
 
 ## Seasons
 
@@ -171,4 +178,6 @@ Railway wipes the container disk on every deploy, so the database must live on a
 - `src/db.ts` – SQLite via `bun:sqlite` (`haifa.db`): cards, owners, roll and claim timers. Ownership is per server.
 - `src/config.ts` – rarities, weights, points, roll and claim timers, `ROLL_ONLY_UNCLAIMED`, `IMAGE_BASE_URL`
 - `scripts/optimize-images.ts` + `hooks/pre-commit` – image compression (sharp), automatic on commit
-- `index.html` – landing page with the invite link (open it locally, or serve it from anywhere)
+- `src/web.ts` + `src/admin.ts` – the dashboard's web server and its JSON API
+- `dashboard/` – the admin dashboard (React, bundled by Bun on start)
+- `index.html`, `landing.css`, `landing.js` – the static landing page on GitHub Pages

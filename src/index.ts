@@ -24,7 +24,7 @@ import {
 import { join } from "node:path";
 import * as db from "./db";
 import { scanNewImages } from "./scanner";
-import { startAdmin } from "./admin";
+import { startWeb } from "./web";
 import {
   CLAIM_WINDOW_SECONDS,
   COLLECTION_IDLE_SECONDS,
@@ -515,7 +515,6 @@ client.once(Events.ClientReady, async (c) => {
   const added = await scanNewImages();
   console.log(`startup scan: ${added.length} new cards`);
   for (const id of c.guilds.cache.keys()) scheduleRush(id);
-  startAdmin(c, endSeason); // web dashboard, only if ADMIN_PASSWORD is set
 });
 
 client.on(Events.GuildCreate, async (guild) => {
@@ -905,4 +904,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
   });
 }
 
-if (import.meta.main) client.login(token); // importable without connecting (tests)
+if (import.meta.main) {
+  startWeb(client, endSeason); // site + dashboard, up before Discord finishes connecting
+  client.login(token); // importable without connecting (tests)
+}

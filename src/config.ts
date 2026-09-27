@@ -46,6 +46,9 @@ export const DUEL_MAX_CARDS = 10;        // most cards one side may stake, so no
 export const DUEL_LIST_LIMIT = 10;       // cards listed by name before an embed field summarises the rest
 export const DUEL_SUSPENSE_MS = 1000;    // pause between the spin frames before the result. 0 reveals instantly
 
+// Seasons: permanent points for the top five when a season ends. Never reset.
+export const MEDAL_POINTS = [5, 4, 3, 2, 1];
+
 export const IMAGES_DIR = "images";
 // Optional: serve card images from a public URL instead of uploading them as attachments.
 // Leave empty ("") to upload attachments. Only works with a PUBLIC repo.

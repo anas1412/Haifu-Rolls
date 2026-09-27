@@ -4,7 +4,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { CLAIM_COOLDOWN_HOURS, DB_PATH, RARITIES, ROLL_RESET_HOURS, type Rarity } from "./config";
+import { CLAIM_COOLDOWN_HOURS, DB_PATH, MEDAL_POINTS, RARITIES, ROLL_RESET_HOURS, type Rarity } from "./config";
 
 export interface Card {
   id: number;
@@ -161,9 +161,6 @@ export function seasonTop(guildId: string, season: number, limit = 10): Standing
     .slice(0, limit);
 }
 
-/** Medal points awarded to the top five when a season ends. */
-export const MEDAL_POINTS = [5, 4, 3, 2, 1];
-
 /**
  * Close the live season: award medals to the top five and archive them.
  * Claims are kept, so past collections stay readable; the next season simply ignores them.
@@ -206,13 +203,14 @@ export interface CardFilter {
   rarity?: string;   // "" for any tier
   owner?: string;    // "" any, "none" unclaimed, otherwise a user id
   limit?: number;
+  offset?: number;  // for paging through a long list
 }
 
 /** Cards with their owner in this server's live season, plus how many matched before the limit. */
 export function cardsWithOwners(
   guildId: string,
   opts: CardFilter = {},
-): { cards: { id: number; name: string; rarity: Rarity; owner: string | null }[]; total: number } {
+): { cards: { id: number; name: string; rarity: Rarity; file: string; owner: string | null }[]; total: number } {
   const search = (opts.search ?? "").trim().replace(/^#/, "");
   const asId = /^\d+$/.test(search) ? Number(search) : -1;
   const rarity = opts.rarity ?? "";
@@ -231,8 +229,8 @@ export function cardsWithOwners(
 
   const total = (db.query(`SELECT COUNT(*) AS n ${where}`).get(...args) as { n: number }).n;
   const cards = db
-    .query(`SELECT c.id, c.name, c.rarity, CAST(k.user_id AS TEXT) AS owner ${where} ORDER BY c.id LIMIT ?`)
-    .all(...args, opts.limit ?? 200) as { id: number; name: string; rarity: Rarity; owner: string | null }[];
+    .query(`SELECT c.id, c.name, c.rarity, c.file, CAST(k.user_id AS TEXT) AS owner ${where} ORDER BY c.id LIMIT ? OFFSET ?`)
+    .all(...args, opts.limit ?? 200, opts.offset ?? 0) as { id: number; name: string; rarity: Rarity; file: string; owner: string | null }[];
   return { cards, total };
 }
 

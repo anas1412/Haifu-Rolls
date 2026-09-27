@@ -1,19 +1,22 @@
 /**
- * Admin dashboard: a small web page for looking at servers, seeing who owns what, and moving
- * cards around without touching SQL.
+ * Admin dashboard API: the JSON the React dashboard (dashboard/) reads and writes.
  *
- * It only starts when ADMIN_PASSWORD is set. You sign in once and a cookie keeps you signed in
- * for 30 days, so there is no token to paste on every visit.
+ * It only runs when ADMIN_PASSWORD is set. Signing in sets a cookie that keeps you in for 30 days,
+ * so there is no token to paste on every visit. Every route except /api/login needs that cookie,
+ * and every change must be sent as JSON: a form on another site cannot fake that, so a link or a
+ * hidden form elsewhere can't move cards while you are signed in.
  */
-import type { Client } from "discord.js";
-import type { SeasonEnd } from "./index";
+import type { Client, Guild } from "discord.js";
+import { MEDAL_POINTS, RARITIES, RARITY_ORDER, SECRET_RARITIES } from "./config";
 import * as db from "./db";
-import { RARITIES, RARITY_ORDER, type Rarity } from "./config";
+import type { SeasonEnd } from "./index";
 
 const PASSWORD = process.env.ADMIN_PASSWORD ?? "";
-type EndSeason = (guildId: string) => Promise<SeasonEnd | null>;
 const COOKIE = "haifu_admin";
 const SESSION_DAYS = 30;
+type EndSeason = (guildId: string) => Promise<SeasonEnd | null>;
+
+export const adminEnabled = () => !!PASSWORD;
 
 // ---------- sign-in ----------
 
@@ -50,288 +53,189 @@ function cookieFrom(req: Request): string | undefined {
     .find(([k]) => k === COOKIE)?.[1];
 }
 
-// ---------- html ----------
+const session = (value: string, maxAge: number) =>
+  `${COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${process.env.RAILWAY_ENVIRONMENT ? "; Secure" : ""}`;
 
-const esc = (s: unknown): string =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+// ---------- people ----------
 
-const STYLE = `
-  *{box-sizing:border-box}
-  body{margin:0;background:#160409;color:#f4e7d3;font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
-  a{color:#f1d28a}
-  .wrap{max-width:1000px;margin:0 auto;padding:20px}
-  h1{font-size:22px;margin:0 0 4px}
-  h2{font-size:17px;margin:28px 0 10px;color:#f1d28a}
-  .sub{color:#bfae99;font-size:14px;margin:0 0 20px}
-  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;margin-bottom:12px}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.07);vertical-align:middle}
-  th{color:#bfae99;font-weight:600;font-size:13px}
-  .name{font-weight:600}
-  .muted{color:#bfae99}
-  input,select,button{font:inherit;border-radius:8px;border:1px solid rgba(255,255,255,.14);
-    background:#241016;color:#f4e7d3;padding:7px 10px}
-  button{cursor:pointer;background:#d9a441;color:#1d0b02;border:0;font-weight:600}
-  button.ghost{background:transparent;color:#e0557b;border:1px solid rgba(224,85,123,.5);font-weight:500}
-  form.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0}
-  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.07)}
-  .flash{background:rgba(46,204,113,.14);border:1px solid rgba(46,204,113,.4);padding:10px 12px;border-radius:10px;margin-bottom:14px}
-  .top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
-  @media(max-width:640px){td,th{padding:6px 4px;font-size:13px}.wrap{padding:14px}}
-`;
+type Person = { userId: string; name: string; avatar: string | null };
+const people = new Map<string, { at: number; person: Person }>();
+const PERSON_TTL = 10 * 60_000; // nicknames change; don't keep them forever
 
-function page(title: string, body: string): Response {
-  return html(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)}</title><style>${STYLE}</style>
-<div class="wrap"><div class="top"><h1>${esc(title)}</h1><a href="/logout">sign out</a></div>${body}</div>`);
-}
-
-const html = (s: string, status = 200, headers: Record<string, string> = {}) =>
-  new Response(s, { status, headers: { "content-type": "text/html; charset=utf-8", ...headers } });
-
-const redirect = (to: string, headers: Record<string, string> = {}) =>
-  new Response(null, { status: 303, headers: { location: to, ...headers } });
-
-function loginPage(error = ""): Response {
-  return html(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Haifu Rolls admin</title><style>${STYLE}</style>
-<div class="wrap" style="max-width:340px;padding-top:80px">
-  <h1>Haifu Rolls</h1><p class="sub">Admin sign in</p>
-  ${error ? `<div class="card" style="border-color:rgba(224,85,123,.5)">${esc(error)}</div>` : ""}
-  <form method="post" action="/login" class="card">
-    <input type="password" name="password" placeholder="Password" autofocus style="width:100%;margin-bottom:10px">
-    <button style="width:100%">Sign in</button>
-  </form>
-  <p class="sub">You stay signed in on this device for ${SESSION_DAYS} days.</p>
-</div>`);
-}
-
-// ---------- name lookup ----------
-
-const nameCache = new Map<string, string>();
-
-async function displayName(client: Client, guildId: string, userId: string): Promise<string> {
+/** Server nickname and avatar, falling back to the global profile, then to the bare id. */
+async function person(client: Client, guildId: string, userId: string): Promise<Person> {
   const key = `${guildId}:${userId}`;
-  const hit = nameCache.get(key);
-  if (hit) return hit;
-  const guild = client.guilds.cache.get(guildId);
-  const member = await guild?.members.fetch(userId).catch(() => null);
-  const name = member?.displayName ?? (await client.users.fetch(userId).catch(() => null))?.displayName ?? userId;
-  nameCache.set(key, name);
-  return name;
+  const hit = people.get(key);
+  if (hit && Date.now() - hit.at < PERSON_TTL) return hit.person;
+  const member = await client.guilds.cache.get(guildId)?.members.fetch(userId).catch(() => null);
+  const user = member?.user ?? (await client.users.fetch(userId).catch(() => null));
+  const p: Person = {
+    userId,
+    name: member?.displayName ?? user?.displayName ?? userId,
+    avatar: member?.displayAvatarURL({ size: 64 }) ?? user?.displayAvatarURL({ size: 64 }) ?? null,
+  };
+  people.set(key, { at: Date.now(), person: p });
+  return p;
 }
 
-// ---------- pages ----------
+// ---------- data ----------
 
-async function serversPage(client: Client): Promise<Response> {
-  const ids = new Set([...client.guilds.cache.keys(), ...db.guildsWithData()]);
-  const rows = await Promise.all(
-    [...ids].map(async (id) => {
-      const guild = client.guilds.cache.get(id);
-      const players = db.seasonTop(id, db.currentSeason(id), 100);
-      const deck = db.deckBreakdown(id);
-      const total = deck.reduce((n, r) => n + r.total, 0);
-      const claimed = deck.reduce((n, r) => n + r.claimed, 0);
-      return `<tr>
-        <td class="name"><a href="/g/${esc(id)}">${esc(guild?.name ?? id)}</a><div class="muted" style="font-size:12px">${esc(id)}</div></td>
-        <td>${players.length}</td><td>${claimed} / ${total}</td><td>${db.currentSeason(id)}</td></tr>`;
-    }),
-  );
-  return page(
-    "Servers",
-    `<div class="card"><table><tr><th>Server</th><th>Players</th><th>Cards claimed</th><th>Season</th></tr>${rows.join("")}</table></div>`,
-  );
-}
-
-async function serverPage(client: Client, guildId: string, url: URL, flash = ""): Promise<Response> {
-  const guild = client.guilds.cache.get(guildId);
-  const search = url.searchParams.get("q") ?? "";
-  const rarity = url.searchParams.get("rarity") ?? "";
-  const owner = url.searchParams.get("owner") ?? "";
-  const season = db.currentSeason(guildId);
-
-  const players = db.seasonTop(guildId, season, 100);
-  const named = await Promise.all(
-    players.map(async (p) => ({ ...p, name: await displayName(client, guildId, p.userId) })),
-  );
-  const playerRows = named
-    .map(
-      (p) =>
-        `<tr><td class="name">${esc(p.name)}</td><td>${p.count}</td><td>${p.points}</td>
-         <td><a href="/g/${esc(guildId)}?owner=${esc(p.userId)}">view cards</a></td></tr>`,
-    )
-    .join("");
-
-  const LIMIT = 300;
-  const { cards, total } = db.cardsWithOwners(guildId, { search, rarity, owner, limit: LIMIT });
-
-  const options = named.map((p) => `<option value="${esc(p.userId)}">${esc(p.name)}</option>`).join("");
-  const cardRows = await Promise.all(
-    cards.map(async (c) => {
-      const owner = c.owner ? esc(await displayName(client, guildId, c.owner)) : `<span class="muted">unclaimed</span>`;
-      return `<tr>
-        <td><span class="pill">#${c.id}</span></td>
-        <td class="name">${RARITIES[c.rarity as Rarity].emoji} ${esc(c.name)}</td>
-        <td class="muted">${esc(c.rarity)}</td>
-        <td>${owner}</td>
-        <td>
-          <form class="row" method="post" action="/g/${esc(guildId)}/set">
-            <input type="hidden" name="card" value="${c.id}">
-            <input type="hidden" name="back" value="${esc(url.search)}">
-            <select name="user"><option value="">give to…</option>${options}</select>
-            <input name="userId" placeholder="or user ID" size="12">
-            <button>Save</button>
-          </form>
-        </td>
-        <td>${
-          c.owner
-            ? `<form class="row" method="post" action="/g/${esc(guildId)}/clear" onsubmit="return confirm('Return #${c.id} to the pool?')">
-                 <input type="hidden" name="card" value="${c.id}">
-                 <input type="hidden" name="back" value="${esc(url.search)}">
-                 <button class="ghost">Remove</button></form>`
-            : ""
-        }</td></tr>`;
-    }),
-  );
-
+function deckTotals(guildId: string) {
   const deck = db.deckBreakdown(guildId);
-  const deckTotal = deck.reduce((n, r) => n + r.total, 0);
-  const claimed = deck.reduce((n, r) => n + r.claimed, 0);
-
-  return page(
-    guild?.name ?? guildId,
-    `${flash ? `<div class="flash">${esc(flash)}</div>` : ""}
-     <p class="sub"><a href="/">← all servers</a> · season ${season} · ${claimed} of ${deckTotal} cards claimed</p>
-
-     <h2>Players</h2>
-     <div class="card"><table><tr><th>Name</th><th>Cards</th><th>Points</th><th></th></tr>${playerRows || `<tr><td colspan="4" class="muted">nobody yet</td></tr>`}</table></div>
-
-     <h2>Season</h2>
-     <div class="card">
-       <p class="muted">Ends season ${season} now: the top 5 above get their permanent medals, every card goes back to the pool,
-       and the bot posts the results in the server, tagging @everyone. This cannot be undone.</p>
-       ${named.length
-         ? `<form method="post" action="/g/${esc(guildId)}/end-season" onsubmit="return confirm('End season ${season} for ${esc((guild?.name ?? guildId).replace(/['"\\`]/g, ""))}? This cannot be undone.')">
-              <input type="hidden" name="season" value="${season}">
-              <button class="ghost">End season ${season}</button>
-            </form>`
-         : `<p class="muted">Nobody has claimed a card this season, so there is nothing to end.</p>`}
-     </div>
-
-     <h2>Cards</h2>
-     <form class="bar" method="get" action="/g/${esc(guildId)}">
-       <input name="q" value="${esc(search)}" placeholder="number or name">
-       <select name="rarity">
-         <option value="">any rarity</option>
-         ${[...RARITY_ORDER].reverse().map((t) => `<option value="${esc(t)}" ${t === rarity ? "selected" : ""}>${RARITIES[t].emoji} ${esc(t)}</option>`).join("")}
-       </select>
-       <select name="owner">
-         <option value="">anyone</option>
-         <option value="none" ${owner === "none" ? "selected" : ""}>unclaimed only</option>
-         ${named.map((p) => `<option value="${esc(p.userId)}" ${p.userId === owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
-       </select>
-       <button>Filter</button>
-       ${search || rarity || owner ? `<a href="/g/${esc(guildId)}">reset</a>` : ""}
-     </form>
-     <div class="card"><table>
-       <tr><th>#</th><th>Card</th><th>Rarity</th><th>Owner</th><th>Give to</th><th></th></tr>
-       ${cardRows.join("") || `<tr><td colspan="6" class="muted">no matches</td></tr>`}
-     </table></div>
-     <p class="sub">Showing ${cards.length} of ${total} matching card(s)${total > LIMIT ? ` · narrow the filters to see the rest` : ""}.</p>`,
-  );
+  return { deck, claimed: deck.reduce((n, r) => n + r.claimed, 0), total: deck.reduce((n, r) => n + r.total, 0) };
 }
 
-// ---------- server ----------
-
-export function startAdmin(client: Client, endSeason: EndSeason): void {
-  if (!PASSWORD) {
-    console.log("admin dashboard disabled (set ADMIN_PASSWORD to enable)");
-    return;
-  }
-  const port = Number(process.env.PORT ?? 8080);
-  try {
-    listen(port, client, endSeason);
-    console.log(`admin dashboard listening on :${port}`);
-  } catch (err) {
-    // The dashboard is a convenience; never let it take the bot down with it.
-    console.error("admin dashboard failed to start:", err);
-  }
+function serverCard(client: Client, id: string) {
+  const guild: Guild | undefined = client.guilds.cache.get(id);
+  const season = db.currentSeason(id);
+  const { claimed, total } = deckTotals(id);
+  return {
+    id,
+    name: guild?.name ?? id,
+    icon: guild?.iconURL({ size: 64 }) ?? null,
+    members: guild?.memberCount ?? null,
+    present: !!guild, // false when the bot was removed but the server still has game history
+    season,
+    players: db.seasonTop(id, season, 10_000).length,
+    claimed,
+    total,
+  };
 }
 
-function listen(port: number, client: Client, endSeason: EndSeason): void {
-  Bun.serve({
-    port,
-    idleTimeout: 30,
-    async fetch(req) {
-      const url = new URL(req.url);
-      const signedIn = tokenIsValid(cookieFrom(req));
+async function serverDetail(client: Client, id: string) {
+  const season = db.currentSeason(id);
+  const { deck } = deckTotals(id);
+  const standings = db.seasonTop(id, season, 500);
+  const allTime = db.allTimeLeaderboard(id, 10);
+  return {
+    ...serverCard(client, id),
+    deck: RARITY_ORDER.map((rarity) => ({ rarity, ...(deck.find((d) => d.rarity === rarity) ?? { total: 0, claimed: 0 }) })),
+    players: await Promise.all(standings.map(async (s) => ({ ...(await person(client, id, s.userId)), points: s.points, cards: s.count }))),
+    allTime: await Promise.all(allTime.map(async (a) => ({ ...(await person(client, id, a.userId)), ...a }))),
+  };
+}
 
-      if (url.pathname === "/login" && req.method === "POST") {
-        const form = await req.formData();
-        if (timingSafeEqual(String(form.get("password") ?? ""), PASSWORD)) {
-          return redirect("/", {
-            "set-cookie": `${COOKIE}=${issueToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}; Secure`,
-          });
-        }
-        await Bun.sleep(600); // slow down guessing
-        return loginPage("Wrong password");
-      }
-      if (url.pathname === "/logout") {
-        return redirect("/", { "set-cookie": `${COOKIE}=; HttpOnly; Path=/; Max-Age=0` });
-      }
-      if (!signedIn) return loginPage();
+// ---------- routes ----------
 
-      if (url.pathname === "/") return serversPage(client);
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  Response.json(body, { status, headers: { "cache-control": "no-store", ...headers } });
+const fail = (status: number, error: string) => json({ error }, status);
 
-      const set = url.pathname.match(/^\/g\/(\d+)\/set$/);
-      if (set && req.method === "POST") {
-        const form = await req.formData();
-        const guildId = set[1]!;
-        const cardId = Number(form.get("card"));
-        const userId = String(form.get("userId") || form.get("user") || "").trim();
-        const back = String(form.get("back") ?? "");
-        if (!/^\d{5,25}$/.test(userId)) return serverPage(client, guildId, new URL(`${url.origin}/g/${guildId}${back}`), "Pick a player or paste a valid user ID.");
-        db.setOwner(guildId, cardId, userId);
-        const who = await displayName(client, guildId, userId);
-        return serverPage(client, guildId, new URL(`${url.origin}/g/${guildId}${back}`), `Card #${cardId} now belongs to ${who}.`);
-      }
+async function body(req: Request): Promise<Record<string, unknown>> {
+  return ((await req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
+}
 
-      const clear = url.pathname.match(/^\/g\/(\d+)\/clear$/);
-      if (clear && req.method === "POST") {
-        const form = await req.formData();
-        const guildId = clear[1]!;
-        const cardId = Number(form.get("card"));
-        const back = String(form.get("back") ?? "");
-        const removed = db.clearOwner(guildId, cardId);
-        return serverPage(client, guildId, new URL(`${url.origin}/g/${guildId}${back}`), removed ? `Card #${cardId} is back in the pool.` : `Card #${cardId} was not owned.`);
-      }
+/** Handles every /api request. The web server only calls this when the dashboard is enabled. */
+export async function adminApi(req: Request, client: Client, endSeason: EndSeason): Promise<Response> {
+  const url = new URL(req.url);
+  const path = url.pathname.slice("/api".length);
+  const write = req.method !== "GET";
+  if (write && !req.headers.get("content-type")?.includes("application/json")) return fail(415, "Send JSON.");
 
-      const end = url.pathname.match(/^\/g\/(\d+)\/end-season$/);
-      if (end && req.method === "POST") {
-        const guildId = end[1]!;
-        const form = await req.formData();
-        const page = new URL(`${url.origin}/g/${guildId}`);
-        // The form carries the season it was shown for, so a resubmit or a stale tab can't end the next one too.
-        if (Number(form.get("season")) !== db.currentSeason(guildId)) {
-          return serverPage(client, guildId, page, "That season has already ended. Nothing was changed.");
-        }
-        const result = await endSeason(guildId);
-        if (!result) return serverPage(client, guildId, page, "Nobody has claimed a card this season, so it was left open.");
-        const where = !result.posted
-          ? "The bot could not post the announcement (no channel used yet, or no permission to send there)."
-          : result.pinged
-            ? `Results posted in #${result.channel} and @everyone was tagged.`
-            : `Results posted in #${result.channel}, but @everyone was NOT pinged: give the bot the "Mention @everyone" permission in that server.`;
-        return serverPage(client, guildId, page, `Season ${result.season} ended. ${where}`);
-      }
+  if (path === "/login" && req.method === "POST") {
+    const { password } = await body(req);
+    if (timingSafeEqual(String(password ?? ""), PASSWORD)) {
+      return json({ ok: true }, 200, { "set-cookie": session(issueToken(), SESSION_DAYS * 86400) });
+    }
+    await Bun.sleep(600); // slow down guessing
+    return fail(401, "That password is not right.");
+  }
+  if (path === "/logout" && req.method === "POST") return json({ ok: true }, 200, { "set-cookie": session("", 0) });
+  if (!tokenIsValid(cookieFrom(req))) return fail(401, "Sign in first.");
 
-      const guildPage = url.pathname.match(/^\/g\/(\d+)$/);
-      if (guildPage) return serverPage(client, guildPage[1]!, url);
+  if (path === "/session") return json({ ok: true });
 
-      return new Response("Not found", { status: 404 });
-    },
-  });
+  if (path === "/status") {
+    return json({
+      online: client.isReady(),
+      tag: client.user?.tag ?? null,
+      avatar: client.user?.displayAvatarURL({ size: 64 }) ?? null,
+      ping: client.isReady() ? Math.round(client.ws.ping) : null,
+      uptime: client.uptime ?? 0,
+      servers: client.guilds.cache.size,
+    });
+  }
+
+  if (path === "/meta") {
+    return json({
+      imageBase: "/images", // served by web.ts from the same folder the bot reads
+      medals: MEDAL_POINTS,
+      rarities: RARITY_ORDER.map((key) => ({
+        key,
+        points: RARITIES[key].points,
+        color: `#${RARITIES[key].color.toString(16).padStart(6, "0")}`,
+        secret: SECRET_RARITIES.includes(key),
+      })),
+    });
+  }
+
+  if (path === "/servers") {
+    const ids = new Set([...client.guilds.cache.keys(), ...db.guildsWithData()]);
+    return json([...ids].map((id) => serverCard(client, id)).sort((a, b) => b.players - a.players || a.name.localeCompare(b.name)));
+  }
+
+  const route = path.match(/^\/servers\/(\d{5,25})(\/.*)?$/);
+  if (!route) return fail(404, "Nothing here.");
+  const guildId = route[1]!;
+  const rest = route[2] ?? "";
+
+  if (rest === "" && req.method === "GET") return json(await serverDetail(client, guildId));
+
+  if (rest === "/cards" && req.method === "GET") {
+    const q = url.searchParams;
+    const { cards, total } = db.cardsWithOwners(guildId, {
+      search: q.get("q") ?? "",
+      rarity: q.get("rarity") ?? "",
+      owner: q.get("owner") ?? "",
+      limit: Math.min(Number(q.get("limit")) || 48, 200),
+      offset: Math.max(Number(q.get("offset")) || 0, 0),
+    });
+    const withOwners = await Promise.all(
+      cards.map(async (c) => ({ ...c, owner: c.owner ? await person(client, guildId, c.owner) : null })),
+    );
+    return json({ cards: withOwners, total });
+  }
+
+  if (rest === "/members" && req.method === "GET") {
+    // Search the whole server by name, so a card can go to anyone, not just current players.
+    const query = (url.searchParams.get("q") ?? "").trim();
+    if (/^\d{15,25}$/.test(query)) return json([await person(client, guildId, query)]);
+    const guild = client.guilds.cache.get(guildId);
+    const found = query && guild ? await guild.members.search({ query, limit: 8 }).catch(() => null) : null;
+    if (found) {
+      return json([...found.values()].filter((m) => !m.user.bot).map((m) => ({ userId: m.id, name: m.displayName, avatar: m.displayAvatarURL({ size: 64 }) })));
+    }
+    // No search available: offer this season's players whose name matches.
+    const players = await Promise.all(db.seasonTop(guildId, db.currentSeason(guildId), 500).map((s) => person(client, guildId, s.userId)));
+    return json(players.filter((p) => p.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8));
+  }
+
+  const owner = rest.match(/^\/cards\/(\d+)\/owner$/);
+  if (owner && (req.method === "PUT" || req.method === "DELETE")) {
+    const card = db.getCard(Number(owner[1]));
+    if (!card) return fail(404, `There is no card #${owner[1]}.`);
+    if (req.method === "DELETE") {
+      return db.clearOwner(guildId, card.id) ? json({ ok: true }) : fail(409, `#${card.id} already had no owner.`);
+    }
+    const { userId } = await body(req);
+    if (typeof userId !== "string" || !/^\d{15,25}$/.test(userId)) return fail(400, "Pick someone to give it to.");
+    db.setOwner(guildId, card.id, userId);
+    return json({ ok: true, owner: await person(client, guildId, userId) });
+  }
+
+  if (rest === "/end-season" && req.method === "POST") {
+    // The page says which season it was showing, so a double click or a stale tab can't end the next one too.
+    const { season } = await body(req);
+    if (Number(season) !== db.currentSeason(guildId)) return fail(409, "That season has already ended. Nothing was changed.");
+    const result = await endSeason(guildId);
+    if (!result) return fail(409, "Nobody has claimed a card this season, so it was left open.");
+    return json({
+      ...result,
+      medals: await Promise.all(result.medals.map(async (m) => ({ ...m, ...(await person(client, guildId, m.userId)) }))),
+    });
+  }
+
+  return fail(404, "Nothing here.");
 }
 
 export const _internals = { tokenIsValid, issueToken, timingSafeEqual };

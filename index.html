@@ -1,268 +1,248 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Haifu Rolls — هيفاء وهبي على ديسكورد</title>
-<meta name="description" content="بوت ديسكورد على طريقة Mudae: ارمِ كروت هيفاء وهبي، اطلبها، اجمعها، وتبادلها.">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Haifu Rolls — هيفاء وهبي على ديسكورد">
-<meta property="og:description" content="بوت ديسكورد على طريقة Mudae: ارمِ كروت هيفاء وهبي، اطلبها، اجمعها، وتبادلها.">
-<meta property="og:image" content="https://raw.githubusercontent.com/anas1412/Haifu-Rolls/main/haifu-cover.jpg">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://raw.githubusercontent.com/anas1412/Haifu-Rolls/main/haifu-cover.jpg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --velvet:#2a0812;
-    --velvet-deep:#160409;
-    --gold:#d9a441;
-    --gold-soft:#f1d28a;
-    --gold-line:rgba(217,164,65,.22);
-    --ivory:#f4e7d3;
-    --ivory-dim:#bfae99;
-    --panel:rgba(255,255,255,.04);
-    --panel-line:rgba(255,255,255,.08);
-    --r-common:#a7a7a7; --r-special:#4fcf86; --r-rare:#4aa3ea; --r-legend:#b06be0; --r-queen:#f1c40f;
-    --display:"Aref Ruqaa",serif;
-    --body:"IBM Plex Sans Arabic",system-ui,sans-serif;
-    --mono:"IBM Plex Mono",ui-monospace,monospace;
-    --radius:14px;
-    --space:72px;
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{
-    margin:0;font-family:var(--body);font-weight:300;color:var(--ivory);line-height:1.7;
-    background:
-      radial-gradient(900px 520px at 70% -120px, #5a1226 0%, transparent 70%),
-      linear-gradient(180deg, var(--velvet) 0%, var(--velvet-deep) 100%);
-    background-attachment:fixed;
-  }
-  a{color:inherit}
-  code{font-family:var(--mono)}
-  .wrap{max-width:1040px;margin:0 auto;padding-left:32px;padding-right:32px}
-
-  /* ---------- hero ---------- */
-  .cover{display:block;width:100%;border-radius:var(--radius);margin-bottom:56px;box-shadow:0 30px 60px rgba(0,0,0,.5);border:1px solid var(--gold-line)}
-  header{padding:88px 0 72px}
-  .hero{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
-  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;color:var(--gold-soft);text-transform:uppercase;direction:ltr;text-align:right;margin-bottom:12px}
-  h1{font-family:var(--display);font-weight:700;font-size:clamp(60px,8.5vw,104px);line-height:1;margin:0 0 20px;color:var(--gold);text-shadow:0 2px 0 #6b4a12,0 18px 40px rgba(0,0,0,.45)}
-  .lede{font-size:19px;max-width:36ch;margin:0 0 36px}
-  .lede b{font-weight:600;color:var(--gold-soft)}
-  .cta{display:inline-flex;align-items:center;gap:12px;background:var(--gold);color:#1d0b02;text-decoration:none;font-weight:600;font-size:17px;padding:14px 26px;border-radius:999px;box-shadow:0 10px 30px rgba(217,164,65,.25);transition:transform .15s ease,box-shadow .15s ease}
-  .cta:hover{transform:translateY(-2px);box-shadow:0 14px 36px rgba(217,164,65,.38)}
-  .cta:focus-visible{outline:3px solid var(--ivory);outline-offset:3px}
-  .cta svg{width:22px;height:22px;fill:currentColor}
-  .perm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:20px 0 0;font-size:13px;color:var(--ivory-dim)}
-  .perm code{font-size:12px;color:var(--ivory);background:var(--panel);border:1px solid var(--panel-line);padding:3px 8px;border-radius:6px;direction:ltr}
-
-  /* signature: fan of real cards.
-     .slot = position + rotation + deal-in animation; .card = hover lift. Separate layers so they never fight. */
-  .fan{position:relative;height:460px}
-  .slot{position:absolute;bottom:56px;left:50%;width:200px;margin-left:-100px;transform-origin:50% 130%;z-index:var(--z);
-    transform:rotate(var(--rot)) translateY(var(--lift));animation:deal .8s cubic-bezier(.2,.8,.2,1) backwards}
-  .slot:hover{z-index:9}
-  .card{position:relative;margin:0;aspect-ratio:3/4;border-radius:var(--radius);overflow:hidden;background:#000;
-    border:3px solid var(--rc);box-shadow:0 28px 48px rgba(0,0,0,.55);
-    transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s ease}
-  .slot:hover .card{transform:translateY(-28px) scale(1.04);box-shadow:0 40px 60px rgba(0,0,0,.65),0 0 0 6px color-mix(in srgb,var(--rc) 35%,transparent)}
-  .card img{width:100%;height:100%;object-fit:cover;display:block}
-  .card figcaption{position:absolute;inset:auto 0 0 0;padding:28px 12px 10px;font-size:14px;font-weight:500;color:#fff;
-    background:linear-gradient(180deg,transparent,rgba(0,0,0,.85))}
-  .card figcaption small{display:block;color:var(--rc);font-family:var(--mono);font-size:11px;letter-spacing:.06em;margin-bottom:2px}
-  .slot:nth-child(1){--rot:-24deg;--lift:30px;--z:1;animation-delay:.05s}
-  .slot:nth-child(2){--rot:-12deg;--lift:8px;--z:2;animation-delay:.12s}
-  .slot:nth-child(3){--rot:0deg;--lift:0px;--z:3;animation-delay:.19s}
-  .slot:nth-child(4){--rot:12deg;--lift:8px;--z:2;animation-delay:.26s}
-  .slot:nth-child(5){--rot:24deg;--lift:30px;--z:1;animation-delay:.33s}
-  @keyframes deal{from{opacity:0;transform:rotate(0) translateY(140px)}}
-
-  /* ---------- sections ---------- */
-  section{padding:var(--space) 0;border-top:1px solid var(--gold-line)}
-  .head{margin-bottom:36px}
-  h2{font-family:var(--display);font-weight:400;font-size:38px;line-height:1.2;color:var(--gold-soft);margin:0 0 8px}
-  .sub{margin:0;color:var(--ivory-dim);max-width:60ch;font-size:16px}
-
-  /* rarity: five real cards + a grid of 100 rolls */
-  .tiers{display:grid;grid-template-columns:repeat(5,1fr);gap:20px;margin-bottom:44px}
-  .t{display:flex;flex-direction:column;cursor:default}
-  .t .pic{aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#000;border:3px solid var(--tc);
-    box-shadow:0 18px 36px rgba(0,0,0,.45);transition:transform .25s ease,box-shadow .25s ease}
-  .t:hover .pic{transform:translateY(-6px);box-shadow:0 26px 44px rgba(0,0,0,.55),0 0 0 5px color-mix(in srgb,var(--tc) 30%,transparent)}
-  .t .pic img{width:100%;height:100%;object-fit:cover;display:block}
-  .t .tname{margin-top:16px;font-weight:600;font-size:18px;color:var(--tc);line-height:1.3}
-  .t .pct{font-family:var(--display);font-size:46px;line-height:1;color:var(--ivory);margin:6px 0 8px;direction:ltr;text-align:right}
-  .t .meta{font-size:13px;color:var(--ivory-dim);line-height:1.5}
-  .rolls{display:grid;grid-template-columns:repeat(20,1fr);gap:6px}
-  .rolls i{display:block;aspect-ratio:3/4;border-radius:3px;background:var(--cc);transition:opacity .2s ease}
-  .rolls .q{box-shadow:0 0 12px var(--r-queen)}
-  .rolls-cap{display:flex;justify-content:space-between;gap:16px;margin:14px 0 0;font-size:14px;color:var(--ivory-dim)}
-  /* hovering a tier card dims every other tier's cells */
-  #rarity:has(.t-queen:hover)   .rolls i:not(.q){opacity:.12}
-  #rarity:has(.t-legend:hover)  .rolls i:not(.l){opacity:.12}
-  #rarity:has(.t-rare:hover)    .rolls i:not(.r){opacity:.12}
-  #rarity:has(.t-special:hover) .rolls i:not(.s){opacity:.12}
-  #rarity:has(.t-common:hover)  .rolls i:not(.c){opacity:.12}
-
-  /* rules */
-  .rules{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-  .rule{display:flex;flex-direction:column;gap:6px;padding:24px 22px 22px;border-radius:var(--radius);
-    background:linear-gradient(160deg,rgba(217,164,65,.14),rgba(217,164,65,.03));border:1px solid rgba(217,164,65,.3)}
-  .rule .big{font-family:var(--display);font-size:56px;line-height:1;color:var(--gold)}
-  .rule p{margin:0;font-size:15px;line-height:1.6}
-
-  /* what makes it a game */
-  .feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-  .feat{padding:26px 24px;border-radius:var(--radius);background:rgba(0,0,0,.28);border:1px solid var(--panel-line);
-    transition:border-color .25s ease,transform .25s ease}
-  .feat:hover{border-color:var(--gold-line);transform:translateY(-4px)}
-  .feat .ficon{font-size:34px;line-height:1;margin-bottom:14px}
-  .feat h3{margin:0 0 8px;font-family:var(--display);font-weight:400;font-size:26px;color:var(--gold-soft)}
-  .feat p{margin:0;font-size:15px;line-height:1.7;color:var(--ivory-dim)}
-  .feat b{color:var(--ivory);font-weight:600}
-
-  /* commands */
-  .cmds{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-  .cmd{padding:18px 20px;border-radius:var(--radius);background:rgba(0,0,0,.28);border:1px solid var(--panel-line)}
-  .cmd code{display:block;direction:ltr;text-align:left;font-size:15px;color:var(--gold-soft);margin-bottom:8px}
-  .cmd p{margin:0;font-size:15px;color:var(--ivory)}
-  .inline{font-size:14px;color:var(--gold-soft);direction:ltr;display:inline-block}
-
-  footer{padding:40px 0 64px;border-top:1px solid var(--gold-line);color:var(--ivory-dim);font-size:14px;display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
-  footer a{color:var(--gold-soft);text-decoration:none;border-bottom:1px solid var(--gold-line)}
-
-  @media (max-width:860px){
-    :root{--space:56px}
-    header{padding:64px 0 48px}
-    .hero{grid-template-columns:1fr;gap:40px}
-    .fan{height:340px;order:-1}
-    .slot{width:150px;margin-left:-75px;bottom:40px}
-    h2{font-size:32px}
-    .tiers{grid-template-columns:repeat(3,1fr);gap:14px}
-    .t .pct{font-size:36px}
-    .rolls{grid-template-columns:repeat(10,1fr)}
-    .rules{grid-template-columns:repeat(2,1fr)}
-    .feats{grid-template-columns:1fr}
-    .cmds{grid-template-columns:1fr}
-  }
-  @media (max-width:480px){
-    .rules{grid-template-columns:1fr}
-    .tiers{grid-template-columns:repeat(2,1fr)}
-    .wrap{padding-left:20px;padding-right:20px}
-  }
-  @media (prefers-reduced-motion:reduce){
-    .slot{animation:none}
-    .card,.cta{transition:none}
-    html{scroll-behavior:auto}
-  }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Haifu Rolls: كروت هيفاء وهبي على ديسكورد</title>
+  <meta name="description" content="بوت ديسكورد تلعب بيه مع صحابك: ترمي كروت هيفاء وهبي، تطلبها قبل غيرك، وتجمع المجموعة موسم بعد موسم.">
+  <meta name="theme-color" content="#22091A">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Haifu Rolls: كروت هيفاء وهبي على ديسكورد">
+  <meta property="og:description" content="ترمي كرت، اللي يطلبو الأول يدّيه، وكل موسم يتحسب شكون جمّع أكثر.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/anas1412/Haifu-Rolls/main/haifu-cover.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=Readex+Pro:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="landing.css">
+  <script src="landing.js" defer></script>
 </head>
 <body>
 
-<header class="wrap">
-  <img class="cover" src="haifu-cover.jpg" alt="Haifu Rolls">
-  <div class="hero">
-    <div>
-      <div class="eyebrow">Haifu Rolls · Discord</div>
-      <h1>هيفاء وهبي</h1>
-      <p class="lede">لعبة كروت على ديسكورد على طريقة <b>Mudae</b>. ارمِ كرتاً كل يوم، اطلبه قبل غيرك، اجمع المجموعة، وتبادل مع أصحابك حتى تصل إلى <b>الملكة</b>.</p>
-      <a class="cta" href="https://discord.com/oauth2/authorize?client_id=1545127309353287761&scope=bot%20applications.commands&permissions=2147665920" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4a18 18 0 0 1 4.6 2.3 15.6 15.6 0 0 0-15.6 0A18 18 0 0 1 8.8 3.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 0 13.6.3 18a20 20 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14.3 14.3 0 0 0 11.8 0l.5.4a12.8 12.8 0 0 1-2 1l1.3 2a20 20 0 0 0 6-3c.4-5.2-.7-9.6-3.4-13.6ZM8.7 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm6.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg>
-        أضِف البوت إلى سيرفرك
-      </a>
-      <p class="perm"><span>بدون صلاحيات إدارية. يطلب فقط:</span> <code>Send Messages</code> <code>Embed Links</code> <code>Attach Files</code> <code>Mention Everyone</code> <code>Slash Commands</code></p>
-    </div>
-
-    <div class="fan" aria-label="أمثلة على الكروت">
-      <div class="slot" style="--rc:var(--r-common)"><figure class="card"><img src="images/h42.jpg" alt=""><figcaption><small>عادية</small>قميص راجلها</figcaption></figure></div>
-      <div class="slot" style="--rc:var(--r-rare)"><figure class="card"><img src="images/h20.jpg" alt=""><figcaption><small>نادرة</small>بوسة لبنزرت</figcaption></figure></div>
-      <div class="slot" style="--rc:var(--r-queen)"><figure class="card"><img src="images/h01.jpg" alt=""><figcaption><small>الملكة</small>الهريسة الحارّة</figcaption></figure></div>
-      <div class="slot" style="--rc:var(--r-legend)"><figure class="card"><img src="images/h05.jpg" alt=""><figcaption><small>أسطورية</small>ريدو الصالون</figcaption></figure></div>
-      <div class="slot" style="--rc:var(--r-special)"><figure class="card"><img src="images/h26.jpg" alt=""><figcaption><small>مميزة</small>كرهبة خوها</figcaption></figure></div>
-    </div>
-  </div>
+<header class="nav">
+  <a class="brand" href="#top"><img src="icon.png" alt="" width="34" height="34"><span>Haifu Rolls</span></a>
+  <nav aria-label="أقسام الصفحة">
+    <a href="#how">كيفاش تلعب</a>
+    <a href="#rarity">الندرة</a>
+    <a href="#more">الدروب والتحدي</a>
+    <a href="#commands">الأوامر</a>
+  </nav>
+  <a class="btn-add" href="https://discord.com/oauth2/authorize?client_id=1545127309353287761&scope=bot%20applications.commands&permissions=2147665920" target="_blank" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4a18 18 0 0 1 4.6 2.3 15.6 15.6 0 0 0-15.6 0A18 18 0 0 1 8.8 3.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 0 13.6.3 18a20 20 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14.3 14.3 0 0 0 11.8 0l.5.4a12.8 12.8 0 0 1-2 1l1.3 2a20 20 0 0 0 6-3c.4-5.2-.7-9.6-3.4-13.6ZM8.7 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm6.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg>
+    زيد البوت لسيرفرك
+  </a>
 </header>
 
-<section class="wrap" id="rarity">
-  <div class="head">
-    <h2>خمس درجات من الندرة</h2>
-    <p class="sub">كل كرت له درجة. الدرجة تحدد كم يظهر في الرمي وكم نقطة يضيف لمجموعتك في قائمة المتصدرين.</p>
+<main>
+  <div class="cover-wrap">
+    <img class="cover" src="haifu-cover.jpg" alt="Haifu Rolls: Rolling &amp; Claiming Bot, by anas1412" width="2000" height="750">
   </div>
-  <div class="tiers">
-    <div class="t t-queen" style="--tc:var(--r-queen)"><div class="pic"><img src="images/h52.jpg" alt=""></div><div class="tname">الملكة</div><div class="pct">×25</div><div class="meta">أندر من العادية 25 مرة<br>25 نقطة</div></div>
-    <div class="t t-legend" style="--tc:var(--r-legend)"><div class="pic"><img src="images/h55.jpg" alt=""></div><div class="tname">أسطورية</div><div class="pct">×10</div><div class="meta">أندر من العادية 10 مرات<br>10 نقاط</div></div>
-    <div class="t t-rare" style="--tc:var(--r-rare)"><div class="pic"><img src="images/h62.jpg" alt=""></div><div class="tname">نادرة</div><div class="pct">×4</div><div class="meta">أندر من العادية 4 مرات<br>4 نقاط</div></div>
-    <div class="t t-special" style="--tc:var(--r-special)"><div class="pic"><img src="images/h74.jpg" alt=""></div><div class="tname">مميزة</div><div class="pct">×2</div><div class="meta">أندر من العادية مرتين<br>نقطتان</div></div>
-    <div class="t t-common" style="--tc:var(--r-common)"><div class="pic"><img src="images/h37.jpg" alt=""></div><div class="tname">عادية</div><div class="pct">×1</div><div class="meta">الدرجة الأساسية<br>نقطة واحدة</div></div>
-  </div>
-  <div class="rolls" aria-label="توزيع 100 رمية"><i class="q" style="--cc:var(--r-queen)"></i><i class="q" style="--cc:var(--r-queen)"></i><i class="l" style="--cc:var(--r-legend)"></i><i class="l" style="--cc:var(--r-legend)"></i><i class="l" style="--cc:var(--r-legend)"></i><i class="l" style="--cc:var(--r-legend)"></i><i class="l" style="--cc:var(--r-legend)"></i><i class="l" style="--cc:var(--r-legend)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="r" style="--cc:var(--r-rare)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="s" style="--cc:var(--r-special)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i><i class="c" style="--cc:var(--r-common)"></i></div>
-  <p class="rolls-cap"><span>هكذا تتوزع 100 رمية في المتوسط.</span><span>الكروت مملوكة لكل سيرفر على حدة.</span></p>
-</section>
 
-<section class="wrap" id="rules">
-  <div class="head">
-    <h2>القواعد</h2>
-    <p class="sub">الرميّات تتجدد للجميع كل ساعتين، والطلب بعد 3 ساعات من آخر طلب لك.</p>
-  </div>
-  <div class="rules">
-    <div class="rule"><div class="big">5</div><p>رميّات لكل لاعب، تتجدد كل ساعتين</p></div>
-    <div class="rule"><div class="big">1</div><p>طلب كل 3 ساعات. اختر كرتك جيداً</p></div>
-    <div class="rule"><div class="big">30</div><p>ثانية يبقى فيها زر الطلب بعد الرمي. الأسرع يفوز</p></div>
-    <div class="rule"><div class="big">5</div><p>دقائق أمام الطرف الآخر لقبول عرض التبادل أو رفضه</p></div>
-  </div>
-</section>
+  <section class="hero" id="top">
+    <div class="hero-copy">
+      <h1>كروت هيفاء وهبي، في سيرفرك.</h1>
+      <p class="lede">بوت ديسكورد تلعب بيه مع صحابك. ترمي كرت، اللي يطلبو الأول يدّيه، وكل موسم يتحسب شكون جمّع أكثر. جرّب رمية هوني قبل ما تزيدو.</p>
+      <div class="hero-cta">
+        <a class="btn-add big" href="https://discord.com/oauth2/authorize?client_id=1545127309353287761&scope=bot%20applications.commands&permissions=2147665920" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4a18 18 0 0 1 4.6 2.3 15.6 15.6 0 0 0-15.6 0A18 18 0 0 1 8.8 3.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 0 13.6.3 18a20 20 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14.3 14.3 0 0 0 11.8 0l.5.4a12.8 12.8 0 0 1-2 1l1.3 2a20 20 0 0 0 6-3c.4-5.2-.7-9.6-3.4-13.6ZM8.7 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm6.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg>
+          زيد البوت لسيرفرك
+        </a>
+        <a class="btn-ghost" href="#how">كيفاش تلعب</a>
+      </div>
+      <p class="perms">من غير صلاحيات إدارة. يطلب كان: <code>Send Messages</code> <code>Embed Links</code> <code>Attach Files</code> <code>Mention Everyone</code> <code>Slash Commands</code></p>
+    </div>
 
-<section class="wrap" id="play">
-  <div class="head">
-    <h2>أكثر من مجرد جمع</h2>
-    <p class="sub">ثلاث طرق تخليك تلحق المتصدرين حتى لو بدأت متأخراً.</p>
-  </div>
-  <div class="feats">
-    <div class="feat">
-      <div class="ficon">⚡</div>
-      <h3>الدروب</h3>
-      <p>كل بضع ساعات يسقط كرت مميز أو نادر في القناة. أول من يضغط يربحه <b>مجاناً</b>، ولا يستهلك طلبك.</p>
+    <!-- A working copy of the bot's /roll embed. landing.js brings it to life with the real deck and odds. -->
+    <div class="demo" id="demo">
+      <div class="discord" aria-label="تجربة رمية">
+        <div class="msg-cmd"><span class="at">إنتي</span> استعملت <span class="slash">/roll</span></div>
+        <div class="msg">
+          <img class="avatar" src="icon.png" alt="" width="40" height="40">
+          <div class="msg-body">
+            <div class="msg-head"><b>Haifu Rolls</b><span class="app">APP</span><span class="when">اليوم</span></div>
+            <div class="embed" style="--bar:#f1c40f">
+              <div class="embed-title"><i class="dot" style="background:#f1c40f"></i><span data-f="name">الهاربة مالمتحف</span></div>
+              <p class="embed-desc" data-f="desc">خرجت مالتصويرة، والروبة مازالت تخرج.</p>
+              <div class="fields">
+                <div><span>الندرة</span><b data-f="tier" style="color:#f1c40f">الملكة</b></div>
+                <div><span>القيمة</span><b data-f="points">25 نقطة</b></div>
+                <div class="wide"><span>المالك</span><b data-f="owner">متاحة</b></div>
+              </div>
+              <div class="embed-img"><img data-f="img" src="images/h52.jpg" alt="الهاربة مالمتحف"></div>
+            </div>
+            <div class="buttons" hidden>
+              <button class="claim" type="button"><i class="timer"></i><span>اطلبها</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-bar">
+        <button class="btn-roll" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>
+          <span>ارمي</span>
+        </button>
+        <span class="left" aria-live="polite">باقيلك 5 رميات</span>
+      </div>
+      <p class="demo-status" aria-live="polite"></p>
     </div>
-    <div class="feat">
-      <div class="ficon">⚔️</div>
-      <h3>التحدي</h3>
-      <p>راهن بكرت أو عدة كروت مقابل كروت أي عضو. لازم يوافق، وبعدها <b>قرعة عادلة</b> تقرر. الفائز يأخذ كل الكروت.</p>
-    </div>
-    <div class="feat">
-      <div class="ficon">🏆</div>
-      <h3>المواسم</h3>
-      <p>الموسم ينتهي لما يُطلب آخر كرت. أول خمسة يأخذون نقاطاً <b>دائمة</b>، وتبدأ جولة جديدة وكل الكروت متاحة.</p>
-    </div>
-  </div>
-</section>
+  </section>
 
-<section class="wrap" id="commands">
-  <div class="head">
+  <section class="section how" id="how">
+    <h2>كيفاش تلعب</h2>
+    <ol class="steps">
+      <li>
+        <span class="num">1</span>
+        <h3>ترمي</h3>
+        <p>عندك 5 رميات، ويرجعو للناس الكل مع بعضهم كل ساعتين. ما يطلعلكش نفس الكرت مرتين في نفس الدورة.</p>
+        <code>/roll</code>
+      </li>
+      <li>
+        <span class="num">2</span>
+        <h3>تطلب</h3>
+        <p>كل رمية فيها زر طلب يعيش 30 ثانية. أي واحد في القناة ينجم يطلبها، والأسرع يدّيها. عندك طلب واحد كل 3 ساعات، اختار مليح.</p>
+        <code>اطلبها</code>
+      </li>
+      <li>
+        <span class="num">3</span>
+        <h3>تجمع</h3>
+        <p>كل كرت يسوى نقاط حسب ندرتو. اللي يجمع أكثر نقاط يتصدّر الموسم، والخمسة الأوائل ياخذو ميداليات ما تتفسخش.</p>
+        <code>/collection</code>
+      </li>
+    </ol>
+  </section>
+
+  <section class="section rarity" id="rarity">
+    <h2>كل كرت عندو درجة</h2>
+    <p class="sub">الكرت الأندر يطلع أقل، ويسوى نقاط أكثر بنفس النسبة. كرت أندر بـ10 مرات، يسوى 10 مرات أكثر.</p>
+    <div class="ladder" role="tablist" aria-label="درجات الندرة">
+      <button class="rung" type="button" role="tab" aria-selected="true" data-tier="الملكة" style="--tc:#f1c40f"><i class="dot"></i>الملكة</button>
+      <button class="rung" type="button" role="tab" aria-selected="false" data-tier="أسطورية" style="--tc:#9b59b6"><i class="dot"></i>أسطورية</button>
+      <button class="rung" type="button" role="tab" aria-selected="false" data-tier="نادرة" style="--tc:#3498db"><i class="dot"></i>نادرة</button>
+      <button class="rung" type="button" role="tab" aria-selected="false" data-tier="مميزة" style="--tc:#2ecc71"><i class="dot"></i>مميزة</button>
+      <button class="rung" type="button" role="tab" aria-selected="false" data-tier="عادية" style="--tc:#95a5a6"><i class="dot"></i>عادية</button>
+    </div>
+    <div class="tier-panel" role="tabpanel" style="--tc:#f1c40f">
+      <div class="tier-facts">
+        <b class="tier-name">الملكة</b>
+        <p class="tier-rule">كل كرت منها أندر من العادية بـ25 مرة.</p>
+        <p class="tier-points"><span class="pts">25 نقطة</span> <span>للكرت</span></p>
+        <button class="btn-ghost small" type="button" data-shuffle>ورّيني كروت أخرين</button>
+      </div>
+      <ul class="tier-cards"></ul>
+    </div>
+  </section>
+
+  <section class="section more" id="more">
+    <h2>تلحق حتى لو بديت متأخر</h2>
+    <p class="sub">الجمع وحدو يعطي الأفضلية للي بدا الأول. هاذم يرجّعو اللعبة مفتوحة للناس الكل.</p>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12l1-8Z"/></svg> الدروب</h3>
+        <p>كل 2 لـ6 ساعات، يطيح كرت مميزة ولا نادرة في القناة. أول واحد يضغط يدّيه بلاش، وما يتحسبش من طلبك.</p>
+      </div>
+      <div class="feature-art art-drop">
+        <figure class="mini" style="--tc:#3498db">
+          <span class="flag">كرت طاير</span>
+          <img src="images/h13.jpg" alt="" loading="lazy">
+          <figcaption>عين من تالي</figcaption>
+        </figure>
+        <span class="fake-btn blue">خوذها بلاش</span>
+      </div>
+    </article>
+
+    <article class="feature flip">
+      <div class="feature-text">
+        <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14.5 17.5 6-6V4h-7.5l-6 6"/><path d="m13 19 6-6"/><path d="m16 16 4 4"/><path d="M9.5 17.5 3.5 11.5V4H11l6 6"/><path d="m11 19-6-6"/><path d="m8 16-4 4"/></svg> التحدي</h3>
+        <p>راهن بكرت ولا لين 10 كروت مقابل كروت عضو آخر. لازم يقبل في 5 دقايق، وبعدها قرعة عادلة، نص بنص: الرابح ياخذ الكروت الكل.</p>
+      </div>
+      <div class="feature-art art-duel">
+        <div class="stake">
+          <img src="images/h08.jpg" alt="" loading="lazy" style="border-color:#9b59b6">
+          <img src="images/h09.jpg" alt="" loading="lazy" style="border-color:#9b59b6">
+          <span>20 نقطة</span>
+        </div>
+        <b class="versus">ضد</b>
+        <div class="stake">
+          <img src="images/h102.jpg" alt="" loading="lazy" style="border-color:#f1c40f">
+          <span>25 نقطة</span>
+        </div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21V8.5h6V21"/><path d="M3 21v-7.5h6"/><path d="M15 21v-5h6v5"/><path d="M2.5 21h19"/><path d="m12 2.8 1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2L8.8 5.1l2.2-.3 1-2Z"/></svg> المواسم</h3>
+        <p>الموسم يوفى كي يتطلب آخر كرت في السيرفر. الخمسة الأوائل ياخذو نقاط دائمة في الترتيب العام، والكروت الكل ترجع متاحة، والرميات والطلبات يتجدّدو للناس الكل.</p>
+      </div>
+      <div class="feature-art art-podium" aria-label="نقاط الميداليات: 5 و4 و3 و2 و1">
+        <div class="bar" style="block-size:98%"><b>5</b><span>1</span></div>
+        <div class="bar" style="block-size:84%"><b>4</b><span>2</span></div>
+        <div class="bar" style="block-size:70%"><b>3</b><span>3</span></div>
+        <div class="bar" style="block-size:56%"><b>2</b><span>4</span></div>
+        <div class="bar" style="block-size:42%"><b>1</b><span>5</span></div>
+      </div>
+    </article>
+
+    <article class="feature flip">
+      <div class="feature-text">
+        <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3.5-3.5"/><path d="M20 16H6l3.5 3.5"/></svg> التبادل والهدية</h3>
+        <p>بدّل كرت بكرت مع أي عضو، ولا اهدي كرت لصاحبك. العرض يستنى 5 دقايق، وما يتم كان كي يقبل الطرف الآخر.</p>
+      </div>
+      <div class="feature-art art-swap">
+        <img src="images/h31.jpg" alt="" loading="lazy" style="border-color:#2ecc71">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3.5-3.5"/><path d="M20 16H6l3.5 3.5"/></svg>
+        <img src="images/h60.jpg" alt="" loading="lazy" style="border-color:#3498db">
+      </div>
+    </article>
+  </section>
+
+  <section class="section commands" id="commands">
     <h2>الأوامر</h2>
-    <p class="sub">كلها أوامر مائلة. اكتب <code class="inline">/</code> في ديسكورد وستظهر. كل كرت له رقم، تقدر تكتبه بدل الاسم.</p>
-  </div>
-  <div class="cmds">
-    <div class="cmd"><code>/roll</code><p>ارمِ كرتاً عشوائياً. إن كان متاحاً يظهر زر لطلبه.</p></div>
-    <div class="cmd"><code>/usage</code><p>كم رمية باقية لك ومتى تتجدد، ومتى يحين طلبك القادم.</p></div>
-    <div class="cmd"><code>/collection [member]</code><p>مجموعتك أو مجموعة عضو، مرتبة حسب الندرة مع النقاط.</p></div>
-    <div class="cmd"><code>/card &lt;name&gt;</code><p>ابحث عن كرت برقمه أو اسمه، وشاهد من يملكه.</p></div>
-    <div class="cmd"><code>/top [season]</code><p>متصدرو الموسم الحالي. اكتب رقم موسم لترى نتيجته النهائية.</p></div>
-    <div class="cmd"><code>/leaderboard</code><p>الترتيب العام عبر كل المواسم. لا يُصفَّر أبداً.</p></div>
-    <div class="cmd"><code>/duel &lt;member&gt; &lt;my_card&gt; &lt;their_card&gt;</code><p>راهن بكرت واحد أو حتى 10 كروت مقابل كروته. افصل بين الأرقام بفاصلة. الفائز يأخذ الكل.</p></div>
-    <div class="cmd"><code>/gift &lt;member&gt; &lt;name&gt;</code><p>اهدِ كرتاً من مجموعتك، بالرقم أو الاسم.</p></div>
-    <div class="cmd"><code>/exchange &lt;member&gt; &lt;my_card&gt; &lt;their_card&gt;</code><p>اعرض تبادل كرت بكرت. الطرف الآخر يقبل أو يرفض.</p></div>
-    <div class="cmd"><code>/divorce &lt;name&gt;</code><p>تخلَّ عن كرت ليعود متاحاً للجميع.</p></div>
-    <div class="cmd"><code>/rescan</code><p>للإدارة: سجّل الصور الجديدة في مجلد images.</p></div>
-  </div>
-</section>
+    <p class="sub">اكتب <code>/</code> في ديسكورد وتطلعلك الكل. كل كرت عندو رقم، تنجم تكتبو في بلاصة الاسم.</p>
+    <div class="chips" role="group" aria-label="صنّف الأوامر">
+      <button type="button" aria-pressed="true" data-group="all">الكل</button>
+      <button type="button" aria-pressed="false" data-group="play">اللعب</button>
+      <button type="button" aria-pressed="false" data-group="trade">التبديل والتحدي</button>
+      <button type="button" aria-pressed="false" data-group="season">المواسم</button>
+    </div>
+    <ul class="cmd-list">
+      <li data-group="play"><code><b>/roll</b></code><p>ارمي كرت. كان متاح، يطلعلو زر باش تطلبو.</p><button class="copy" type="button" data-copy="/roll">انسخ</button></li>
+      <li data-group="play"><code><b>/usage</b></code><p>قدّاش باقيلك رميات ووقتاش يرجعو، ووقتاش طلبك الجاي.</p><button class="copy" type="button" data-copy="/usage">انسخ</button></li>
+      <li data-group="play"><code><b>/collection</b> [member]</code><p>مجموعتك ولا مجموعة عضو، مرتّبة بالندرة ومعاها النقاط.</p><button class="copy" type="button" data-copy="/collection">انسخ</button></li>
+      <li data-group="play"><code><b>/card</b> &lt;name&gt;</code><p>لوّج على كرت بالرقم ولا بالاسم، وشوف شكون عندو.</p><button class="copy" type="button" data-copy="/card">انسخ</button></li>
+      <li data-group="play"><code><b>/deck</b></code><p>الدرجات الكل: قدّاش متاح وقدّاش مطلوب في السيرفر.</p><button class="copy" type="button" data-copy="/deck">انسخ</button></li>
+      <li data-group="trade"><code><b>/duel</b> &lt;member&gt; &lt;my_card&gt; &lt;their_card&gt;</code><p>راهن بكرت ولا لين 10 كروت، مفصولين بفاصلة. الرابح ياخذ الكل.</p><button class="copy" type="button" data-copy="/duel">انسخ</button></li>
+      <li data-group="trade"><code><b>/exchange</b> &lt;member&gt; &lt;my_card&gt; &lt;their_card&gt;</code><p>اعرض تبديل كرت بكرت. الطرف الآخر يقبل ولا يرفض.</p><button class="copy" type="button" data-copy="/exchange">انسخ</button></li>
+      <li data-group="trade"><code><b>/gift</b> &lt;member&gt; &lt;name&gt;</code><p>اهدي كرت من مجموعتك، بالرقم ولا بالاسم.</p><button class="copy" type="button" data-copy="/gift">انسخ</button></li>
+      <li data-group="trade"><code><b>/divorce</b> &lt;name&gt;</code><p>سيّب كرت باش يرجع متاح للناس الكل.</p><button class="copy" type="button" data-copy="/divorce">انسخ</button></li>
+      <li data-group="season"><code><b>/top</b> [season]</code><p>ترتيب الموسم الحالي. اكتب رقم موسم باش تشوف نتيجتو.</p><button class="copy" type="button" data-copy="/top">انسخ</button></li>
+      <li data-group="season"><code><b>/leaderboard</b></code><p>الترتيب العام متاع المواسم الكل. ما يتفسخ حتى مرة.</p><button class="copy" type="button" data-copy="/leaderboard">انسخ</button></li>
+    </ul>
+  </section>
 
-<footer class="wrap">
-  <span>البوت مفتوح المصدر ومستضاف ذاتياً. الصور من مصادر عامة لاستخدام خاص داخل السيرفر.</span>
-  <a href="https://github.com/anas1412/Haifu-Rolls">الكود على GitHub</a>
+  <section class="closing">
+    <div class="closing-fan" aria-hidden="true">
+      <img src="images/h01.jpg" alt="" loading="lazy">
+      <img src="images/h03.jpg" alt="" loading="lazy">
+      <img src="images/h322.jpg" alt="" loading="lazy">
+    </div>
+    <h2>زيد هيفاء لسيرفرك</h2>
+    <p>يخدم 24 ساعة على 24، ما يلزمك حتى إعداد. زيدو واكتب <code>/roll</code>.</p>
+    <a class="btn-add big" href="https://discord.com/oauth2/authorize?client_id=1545127309353287761&scope=bot%20applications.commands&permissions=2147665920" target="_blank" rel="noopener">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4a18 18 0 0 1 4.6 2.3 15.6 15.6 0 0 0-15.6 0A18 18 0 0 1 8.8 3.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 0 13.6.3 18a20 20 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14.3 14.3 0 0 0 11.8 0l.5.4a12.8 12.8 0 0 1-2 1l1.3 2a20 20 0 0 0 6-3c.4-5.2-.7-9.6-3.4-13.6ZM8.7 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm6.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg>
+      زيد البوت لسيرفرك
+    </a>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>Haifu Rolls، بوت ديسكورد مفتوح المصدر. التصاور من مصادر عامة، للّعب داخل السيرفرات.</span>
+  <a href="https://github.com/anas1412/Haifu-Rolls" target="_blank" rel="noopener">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-1.8c-2.7.6-3.3-1.2-3.3-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.1-.2-4.4-1.1-4.4-4.8 0-1 .4-1.9 1-2.6-.1-.2-.4-1.2.1-2.5 0 0 .8-.3 2.6 1a9 9 0 0 1 4.8 0c1.8-1.3 2.6-1 2.6-1 .5 1.3.2 2.3.1 2.5.6.7 1 1.6 1 2.6 0 3.7-2.3 4.6-4.4 4.8.3.3.6.9.6 1.7v2.6c0 .3.2.6.7.5A9.5 9.5 0 0 0 12 2.5Z"/></svg>
+    الكود على GitHub
+  </a>
 </footer>
 
 </body>
