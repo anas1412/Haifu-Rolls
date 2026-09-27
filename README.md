@@ -2,8 +2,8 @@
 
 ![Haifu Rolls](haifu-cover.jpg)
 
-**[➕ Add Haifu Rolls to your server](https://discord.com/oauth2/authorize?client_id=1545127309353287761&scope=bot%20applications.commands&permissions=2147534848)**
-The bot is hosted and online 24/7. No setup needed. It asks only for Send Messages, Embed Links, Attach Files, and slash commands. No admin.
+**[➕ Add Haifu Rolls to your server](https://discord.com/oauth2/authorize?client_id=1545127309353287761&scope=bot%20applications.commands&permissions=2147665920)**
+The bot is hosted and online 24/7. No setup needed. It asks only for Send Messages, Embed Links, Attach Files, Mention @everyone (to announce a season's results), and slash commands. No admin.
 
 Mudae-style card game for Discord. Every card is a Haifa Wehbe photo.
 **500 cards are included** in `images/` with hand-picked rarities and Arabic names (`seed.json`).
@@ -57,7 +57,7 @@ Limits: **5 rolls**, refilling for everyone every **2 hours** (windows counted f
 
 1. Create the bot at https://discord.com/developers/applications → New Application → Bot → **Reset Token**, copy it.
 2. Same page → OAuth2 → URL Generator: scope `bot` + `applications.commands`,
-   permissions `Send Messages`, `Embed Links`, `Attach Files`. Open the URL to invite the bot to your server.
+   permissions `Send Messages`, `Embed Links`, `Attach Files`, `Mention Everyone`. Open the URL to invite the bot to your server.
 3. Install [Bun](https://bun.sh) (one command, no admin rights), then install the two dependencies:
 
 ```bash
@@ -112,6 +112,7 @@ A web page for managing the game without touching SQL. It only runs when `ADMIN_
 - Per server: every player's collection size and points, and every card with its owner.
 - Filter cards by number or name, by rarity, and by owner (including unclaimed only).
 - Give a card to anyone, or send one back to the pool.
+- End a server's season early. It asks for confirmation and can't fire twice from a resubmitted page.
 - Sign in once; a cookie keeps you signed in on that device for 30 days.
 
 Set `ADMIN_PASSWORD` in the host's variables and open the service's public URL.
@@ -121,12 +122,12 @@ Set `ADMIN_PASSWORD` in the host's variables and open the service's public URL.
 A season runs until the **last unclaimed card in that server is taken**. Then:
 
 - The top five get permanent medal points: **5, 4, 3, 2, 1**.
-- The bot announces the winners and the next season opens, with every card rollable again.
+- The bot posts the full ranking, tags every player and @everyone, and the next season opens with every card rollable again.
 - Old claims are **archived, not deleted**, so past standings and collections stay readable.
 
 Seasons are per server, so one server can be on season 3 while another is still on season 1.
 `/top` shows the live season, `/top 1` a finished one, and `/leaderboard` the all-time medal table.
-There is no way to end a season by hand; it only ends when the cards run out.
+There is no command to end a season, so moderators can't. Only the bot owner can, from the admin dashboard.
 
 ## Card images: attachments or URLs
 

@@ -6,10 +6,12 @@
  * for 30 days, so there is no token to paste on every visit.
  */
 import type { Client } from "discord.js";
+import type { SeasonEnd } from "./index";
 import * as db from "./db";
 import { RARITIES, RARITY_ORDER, type Rarity } from "./config";
 
 const PASSWORD = process.env.ADMIN_PASSWORD ?? "";
+type EndSeason = (guildId: string) => Promise<SeasonEnd | null>;
 const COOKIE = "haifu_admin";
 const SESSION_DAYS = 30;
 
@@ -205,6 +207,18 @@ async function serverPage(client: Client, guildId: string, url: URL, flash = "")
      <h2>Players</h2>
      <div class="card"><table><tr><th>Name</th><th>Cards</th><th>Points</th><th></th></tr>${playerRows || `<tr><td colspan="4" class="muted">nobody yet</td></tr>`}</table></div>
 
+     <h2>Season</h2>
+     <div class="card">
+       <p class="muted">Ends season ${season} now: the top 5 above get their permanent medals, every card goes back to the pool,
+       and the bot posts the results in the server, tagging @everyone. This cannot be undone.</p>
+       ${named.length
+         ? `<form method="post" action="/g/${esc(guildId)}/end-season" onsubmit="return confirm('End season ${season} for ${esc((guild?.name ?? guildId).replace(/['"\\`]/g, ""))}? This cannot be undone.')">
+              <input type="hidden" name="season" value="${season}">
+              <button class="ghost">End season ${season}</button>
+            </form>`
+         : `<p class="muted">Nobody has claimed a card this season, so there is nothing to end.</p>`}
+     </div>
+
      <h2>Cards</h2>
      <form class="bar" method="get" action="/g/${esc(guildId)}">
        <input name="q" value="${esc(search)}" placeholder="number or name">
@@ -230,14 +244,14 @@ async function serverPage(client: Client, guildId: string, url: URL, flash = "")
 
 // ---------- server ----------
 
-export function startAdmin(client: Client): void {
+export function startAdmin(client: Client, endSeason: EndSeason): void {
   if (!PASSWORD) {
     console.log("admin dashboard disabled (set ADMIN_PASSWORD to enable)");
     return;
   }
   const port = Number(process.env.PORT ?? 8080);
   try {
-    listen(port, client);
+    listen(port, client, endSeason);
     console.log(`admin dashboard listening on :${port}`);
   } catch (err) {
     // The dashboard is a convenience; never let it take the bot down with it.
@@ -245,7 +259,7 @@ export function startAdmin(client: Client): void {
   }
 }
 
-function listen(port: number, client: Client): void {
+function listen(port: number, client: Client, endSeason: EndSeason): void {
   Bun.serve({
     port,
     idleTimeout: 30,
@@ -291,6 +305,25 @@ function listen(port: number, client: Client): void {
         const back = String(form.get("back") ?? "");
         const removed = db.clearOwner(guildId, cardId);
         return serverPage(client, guildId, new URL(`${url.origin}/g/${guildId}${back}`), removed ? `Card #${cardId} is back in the pool.` : `Card #${cardId} was not owned.`);
+      }
+
+      const end = url.pathname.match(/^\/g\/(\d+)\/end-season$/);
+      if (end && req.method === "POST") {
+        const guildId = end[1]!;
+        const form = await req.formData();
+        const page = new URL(`${url.origin}/g/${guildId}`);
+        // The form carries the season it was shown for, so a resubmit or a stale tab can't end the next one too.
+        if (Number(form.get("season")) !== db.currentSeason(guildId)) {
+          return serverPage(client, guildId, page, "That season has already ended. Nothing was changed.");
+        }
+        const result = await endSeason(guildId);
+        if (!result) return serverPage(client, guildId, page, "Nobody has claimed a card this season, so it was left open.");
+        const where = !result.posted
+          ? "The bot could not post the announcement (no channel used yet, or no permission to send there)."
+          : result.pinged
+            ? `Results posted in #${result.channel} and @everyone was tagged.`
+            : `Results posted in #${result.channel}, but @everyone was NOT pinged: give the bot the "Mention @everyone" permission in that server.`;
+        return serverPage(client, guildId, page, `Season ${result.season} ended. ${where}`);
       }
 
       const guildPage = url.pathname.match(/^\/g\/(\d+)$/);

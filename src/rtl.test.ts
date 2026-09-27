@@ -50,3 +50,26 @@ test("a stake line stays a single right-to-left line", () => {
   expect(out).not.toContain(LRI); // numbers fenced by Arabic words need no extra isolate
   expect(out.startsWith(RLI) && out.endsWith(PDI)).toBe(true);
 });
+
+test("the season-end post tags everyone and every player, right to left", async () => {
+  const { seasonEndMessage } = await import("./index");
+  const ids = ["111111111111111111", "222222222222222222", "333333333333333333", "444444444444444444", "555555555555555555", "666666666666666666"];
+  const standings = ids.map((userId, i) => ({ userId, points: 600 - i * 100, count: 60 - i * 10, firstAt: i }));
+  const medals = ids.slice(0, 5).map((userId, i) => ({ userId, place: i + 1, points: 5 - i }));
+  const msg = seasonEndMessage(1, standings, medals, { claimed: 248, total: 507 });
+
+  const [announce, ping] = msg.content.split("\n");
+  expect(ping).toBe("@everyone");                          // alone on its line, no isolate around it
+  expect(announce!.startsWith(RLI)).toBe(true);
+  expect(msg.allowedMentions.parse).toEqual(["everyone", "users"]);
+
+  const embed = msg.embeds[0]!.data;
+  const lines = embed.description!.split("\n").filter(Boolean);
+  for (const id of ids) expect(embed.description).toContain(`<@${id}>`); // all six tagged, pills intact
+  for (const line of lines) expect(line.startsWith(RLI) && line.endsWith(PDI)).toBe(true);
+  expect(embed.title).not.toContain("<@");                  // titles never render mentions
+  expect(lines[0]).toContain("+5 نقاط دائمة");
+  expect(lines[3]).toContain("+نقطتان دائمة");              // 2 is a dual in Arabic, not "2 نقاط"
+  expect(lines[4]).toContain("+1 نقطة دائمة");
+  expect(lines.some((l) => l.includes("6️⃣ <@666666666666666666>"))).toBe(true); // 6th listed, no medal
+});

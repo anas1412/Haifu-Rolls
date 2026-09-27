@@ -358,29 +358,82 @@ async function dropRush(guildId: string): Promise<void> {
 
 // ---------- seasons ----------
 
-const PLACE_ICONS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+const PLACE_ICONS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]; // emoji, not "6.": a digit and dot flip in RTL
 
-/** Once the last free card is claimed, award medals, announce, and let the next season open. */
-async function checkSeasonEnd(guildId: string): Promise<void> {
-  if (Object.values(db.poolCounts(guildId)).some((n) => n)) return; // cards still available
+/** Arabic agreement for the 1-5 medal points: نقطة، نقطتان، 3-10 نقاط. */
+const medalWord = (n: number) => (n === 1 ? "نقطة" : n === 2 ? "نقطتان" : "نقاط");
+
+/**
+ * The end-of-season post. Mentions only render in descriptions and fields, never in a title,
+ * so every player is tagged in the description and the title carries plain text.
+ */
+export function seasonEndMessage(
+  season: number,
+  standings: db.Standing[],
+  medals: { userId: string; place: number; points: number }[],
+  stats: { claimed: number; total: number },
+) {
+  const medalLines = medals.map((m) => {
+    const s = standings.find((x) => x.userId === m.userId)!;
+    const gain = m.points === 2 ? medalWord(2) : `${m.points} ${medalWord(m.points)}`;
+    return `${PLACE_ICONS[m.place - 1]} <@${m.userId}> · ${s.points} نقطة · ${s.count} كرت · +${gain} دائمة`;
+  });
+  const rest = standings.slice(medals.length, 10).map((s, i) => `${PLACE_ICONS[medals.length + i]} <@${s.userId}> · ${s.points} نقطة`);
+  const embed = new EmbedBuilder()
+    .setAuthor({ name: ar("🏁 نهاية الموسم") })
+    .setTitle(`🏆 ترتيب الموسم ${season}`)
+    .setDescription([...medalLines, ...(rest.length ? ["", "**بقية الترتيب**", ...rest] : [])].join("\n"))
+    .addFields(
+      { name: "الكروت المطلوبة", value: `${stats.claimed} من ${stats.total}`, inline: true },
+      { name: "اللاعبين", value: `${standings.length}`, inline: true },
+    )
+    .setColor(COLOR.gold)
+    .setFooter({ text: `الموسم ${season + 1} بدأ · كل الكروت متاحة من جديد · /leaderboard للترتيب العام` });
+  return {
+    // @everyone on its own line: nothing Arabic around it to reorder, and the ping stays a clean pill
+    content: `${ar(`🏁 انتهى الموسم ${season}! هاو الترتيب 👇`)}\n@everyone`,
+    embeds: [arEmbed(embed)],
+    allowedMentions: { parse: ["everyone", "users"] as ("everyone" | "users")[] },
+  };
+}
+
+export interface SeasonEnd {
+  season: number;
+  medals: { userId: string; place: number; points: number }[];
+  posted: boolean;   // the announcement reached a channel
+  pinged: boolean;   // the bot is allowed to ping @everyone there
+  channel: string | null;
+}
+
+/** Close the live season now, award medals and announce it. Null when nobody has played yet. */
+export async function endSeason(guildId: string): Promise<SeasonEnd | null> {
   const season = db.currentSeason(guildId);
+  const standings = db.seasonTop(guildId, season, 100);
+  const deck = db.deckBreakdown(guildId);
+  const stats = { claimed: deck.reduce((n, r) => n + r.claimed, 0), total: deck.reduce((n, r) => n + r.total, 0) };
   const medals = db.closeSeason(guildId);
-  if (!medals.length) return;
+  if (!medals.length) return null;
   console.log(`season ${season} closed in ${guildId}`);
+  const result: SeasonEnd = { season, medals, posted: false, pinged: false, channel: null };
   try {
     const channelId = db.getLastChannel(guildId);
     const channel = channelId ? await client.channels.fetch(channelId) : null;
-    if (!channel?.isSendable()) return;
-    const lines = medals.map((m) => `${PLACE_ICONS[m.place - 1]} <@${m.userId}> — +${m.points} نقطة دائمة`);
-    const embed = new EmbedBuilder()
-      .setTitle(`🏁 انتهى الموسم ${season}`)
-      .setDescription(lines.join("\n"))
-      .setColor(0xf1c40f)
-      .setFooter({ text: `الموسم ${season + 1} بدأ · كل الكروت متاحة من جديد · /leaderboard للترتيب العام` });
-    await channel.send({ embeds: [arEmbed(embed.setAuthor({ name: ar("خلصت الكروت") }))] });
+    if (!channel?.isSendable() || channel.isDMBased()) return result;
+    const me = channel.guild.members.me;
+    result.pinged = !!me && channel.permissionsFor(me).has(PermissionFlagsBits.MentionEveryone);
+    await channel.send(seasonEndMessage(season, standings, medals, stats));
+    result.posted = true;
+    result.channel = channel.name;
   } catch (err) {
     console.error(`season ${season} announcement failed for ${guildId}:`, err);
   }
+  return result;
+}
+
+/** Once the last free card is claimed the season ends on its own. */
+async function checkSeasonEnd(guildId: string): Promise<void> {
+  if (Object.values(db.poolCounts(guildId)).some((n) => n)) return; // cards still available
+  await endSeason(guildId);
 }
 
 // ---------- slash command definitions ----------
@@ -462,7 +515,7 @@ client.once(Events.ClientReady, async (c) => {
   const added = await scanNewImages();
   console.log(`startup scan: ${added.length} new cards`);
   for (const id of c.guilds.cache.keys()) scheduleRush(id);
-  startAdmin(c); // web dashboard, only if ADMIN_PASSWORD is set
+  startAdmin(c, endSeason); // web dashboard, only if ADMIN_PASSWORD is set
 });
 
 client.on(Events.GuildCreate, async (guild) => {
@@ -569,7 +622,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
           .setDescription("لم ينتهِ أي موسم بعد، فالجدول ما زال فارغاً.\nيمتلئ تلقائياً لحظة انتهاء الموسم.")
           .setColor(COLOR.gold)
           .addFields(
-            { name: "الجوائز الدائمة", value: PLACE_ICONS.map((icon, n) => `${icon} ${prizes[n]}`).join("\n"), inline: true },
+            { name: "الجوائز الدائمة", value: prizes.map((prize, n) => `${PLACE_ICONS[n]} ${prize}`).join("\n"), inline: true },
             { name: "متى ينتهي الموسم", value: `عندما يُطلب آخر كرت.\nباقي **${left}** كرت.`, inline: true },
           )
           .setFooter({ text: `الموسم ${live} جارٍ الآن · اكتب /top لترتيب هذا الموسم` });
