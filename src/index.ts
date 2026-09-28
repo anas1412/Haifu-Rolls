@@ -25,26 +25,8 @@ import { join } from "node:path";
 import * as db from "./db";
 import { scanNewImages } from "./scanner";
 import { startWeb } from "./web";
-import {
-  CLAIM_WINDOW_SECONDS,
-  COLLECTION_IDLE_SECONDS,
-  DUEL_LIST_LIMIT,
-  DUEL_MAX_CARDS,
-  DUEL_SUSPENSE_MS,
-  DUEL_WINDOW_SECONDS,
-  EXCHANGE_WINDOW_SECONDS,
-  IMAGE_BASE_URL,
-  IMAGES_DIR,
-  RARITIES,
-  RARITY_ORDER,
-  ROLL_ONLY_UNCLAIMED,
-  ROLLS_PER_RESET,
-  RUSH_MAX_HOURS,
-  RUSH_MAX_RARITY,
-  RUSH_MIN_HOURS,
-  RUSH_MIN_RARITY,
-  SECRET_RARITIES,
-} from "./config";
+import { IMAGE_BASE_URL, IMAGES_DIR, RARITIES, RARITY_ORDER, SECRET_RARITIES } from "./config";
+import { clearSettingsCache, settingsFor } from "./settings"; // tuning: defaults in config.ts, overrides from the dashboard
 
 const token = process.env.DISCORD_TOKEN; // Bun loads .env automatically
 if (!token) {
@@ -89,8 +71,9 @@ function arEmbed(e: EmbedBuilder): EmbedBuilder {
 
 // ---------- helpers ----------
 
-function cardEmbed(card: db.Card, ownerId: string | null = null): EmbedBuilder {
+function cardEmbed(guildId: string, card: db.Card, ownerId: string | null = null): EmbedBuilder {
   const r = RARITIES[card.rarity];
+  const points = settingsFor(guildId).tiers[card.rarity].points;
   return new EmbedBuilder()
     .setTitle(ar(`${r.emoji} ${card.name}`))
     .setDescription(ar(card.description))
@@ -98,7 +81,7 @@ function cardEmbed(card: db.Card, ownerId: string | null = null): EmbedBuilder {
     .addFields(
       { name: ar("الرقم"), value: ar(`#${card.id}`), inline: true },
       { name: ar("الندرة"), value: ar(card.rarity), inline: true },
-      { name: ar("القيمة"), value: ar(`${r.points} نقطة`), inline: true },
+      { name: ar("القيمة"), value: ar(`${points} نقطة`), inline: true },
       // full width on its own row, so the three facts above line up as a neat trio
       { name: ar("المالك"), value: ar(ownerId ? `<@${ownerId}>` : "متاحة 💍"), inline: false },
     )
@@ -111,14 +94,15 @@ function cardFiles(card: db.Card): AttachmentBuilder[] {
 }
 
 /** Weighted pick across the tiers that still have a candidate once `skip` is removed. Weights are per card. */
-function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>, maxRarity: db.Card["rarity"] | undefined): db.Card | null {
+function weightedPick(guildId: string, scope: string | undefined, minRarity: db.Card["rarity"] | undefined, skip: Set<number>, maxRarity: db.Card["rarity"] | undefined): db.Card | null {
+  const weights = settingsFor(guildId).tiers;
   const floor = minRarity ? RARITY_ORDER.indexOf(minRarity) : 0;
   const ceiling = maxRarity ? RARITY_ORDER.indexOf(maxRarity) + 1 : RARITY_ORDER.length;
   const tiers = RARITY_ORDER.slice(floor, ceiling)
     .map((tier) => ({ tier, cards: db.cardsInRarity(tier, scope).filter((c) => !skip.has(c.id)) }))
     .filter((t) => t.cards.length);
   if (!tiers.length) return null;
-  const share = (t: (typeof tiers)[number]) => RARITIES[t.tier].weight * t.cards.length;
+  const share = (t: (typeof tiers)[number]) => weights[t.tier].weight * t.cards.length;
   let roll = Math.random() * tiers.reduce((sum, t) => sum + share(t), 0);
   let chosen = tiers[tiers.length - 1]!;
   for (const t of tiers) {
@@ -133,11 +117,11 @@ function weightedPick(scope: string | undefined, minRarity: db.Card["rarity"] | 
  * so the same card is not rolled twice, unless skipping them would leave nothing to roll at all.
  */
 export function pickCard(guildId: string, minRarity?: db.Card["rarity"], exclude: Iterable<number> = [], maxRarity?: db.Card["rarity"]): db.Card | null {
-  const scope = ROLL_ONLY_UNCLAIMED ? guildId : undefined;
+  const scope = settingsFor(guildId).rollOnlyUnclaimed ? guildId : undefined;
   const skip = new Set(exclude);
-  const fresh = weightedPick(scope, minRarity, skip, maxRarity);
+  const fresh = weightedPick(guildId, scope, minRarity, skip, maxRarity);
   if (fresh || !skip.size) return fresh;
-  return weightedPick(scope, minRarity, new Set(), maxRarity); // nothing new left, repeats are allowed again
+  return weightedPick(guildId, scope, minRarity, new Set(), maxRarity); // nothing new left, repeats are allowed again
 }
 
 /**
@@ -203,25 +187,25 @@ function duelRow(key: string, disabled = false) {
   );
 }
 
-const pointsOf = (cards: db.Card[]) => cards.reduce((n, c) => n + RARITIES[c.rarity].points, 0);
+const pointsOf = (guildId: string, cards: db.Card[]) => cards.reduce((n, c) => n + settingsFor(guildId).tiers[c.rarity].points, 0);
 
 /**
  * One stake block: a line per card, then the totals so a lopsided offer is obvious at a glance.
  * Long bundles are summarised rather than listed, because an embed field caps at 1024 characters
  * and a truncated field would make Discord reject the whole offer.
  */
-export function stakeBlock(cards: db.Card[]): string {
-  const shown = cards.slice(0, DUEL_LIST_LIMIT).map(stakeLine);
+export function stakeBlock(guildId: string, cards: db.Card[]): string {
+  const shown = cards.slice(0, settingsFor(guildId).duelListLimit).map((c) => stakeLine(guildId, c));
   const rest = cards.length - shown.length;
   if (rest > 0) shown.push(`… و${rest} كرت آخر`);
-  return `${shown.join("\n")}\n**${cards.length} كرت · ${pointsOf(cards)} نقطة**`;
+  return `${shown.join("\n")}\n**${cards.length} كرت · ${pointsOf(guildId, cards)} نقطة**`;
 }
 
 /**
  * Resolve "42,43,name" into cards. Rejects unknown cards, repeats, and anything over the cap so the
  * offer embed can never misrepresent what is actually at stake.
  */
-export function parseStake(input: string): { cards: db.Card[] } | { error: string } {
+export function parseStake(guildId: string, input: string): { cards: db.Card[] } | { error: string } {
   const parts = [...new Set(input.split(",").map((p) => p.trim()).filter(Boolean))];
   if (!parts.length) return { error: "ما حددت أي كرت" };
   const cards: db.Card[] = [];
@@ -231,7 +215,8 @@ export function parseStake(input: string): { cards: db.Card[] } | { error: strin
     if (cards.some((c) => c.id === card.id)) return { error: `كرت مكرر: ${card.name}` };
     cards.push(card);
   }
-  if (cards.length > DUEL_MAX_CARDS) return { error: `أقصى ${DUEL_MAX_CARDS} كروت في التحدي` };
+  const max = settingsFor(guildId).duelMaxCards;
+  if (cards.length > max) return { error: `أقصى ${max} كروت في التحدي` };
   return { cards };
 }
 
@@ -259,7 +244,7 @@ function spinEmbed(frame: number, challenger: string, target: string, stakes: st
  * gets its own direction, and a line starting with a code chip lands on the opposite side.
  * Leading with the Arabic name keeps the whole line unambiguously right-to-left.
  */
-const stakeLine = (c: db.Card) => `${RARITIES[c.rarity].emoji} ${c.name} · ${RARITIES[c.rarity].points} نقطة · #${c.id}`;
+const stakeLine = (guildId: string, c: db.Card) => `${RARITIES[c.rarity].emoji} ${c.name} · ${settingsFor(guildId).tiers[c.rarity].points} نقطة · #${c.id}`;
 
 // ---------- /collection browsing ----------
 
@@ -282,7 +267,7 @@ export function collectionPage(gid: string, user: Pick<User, "id" | "displayName
   page = Math.min(Math.max(page, 0), cards.length);
   let embed: EmbedBuilder;
   if (page === 0) {
-    const points = cards.reduce((s, c) => s + RARITIES[c.rarity].points, 0);
+    const points = pointsOf(gid, cards);
     embed = new EmbedBuilder().setTitle(`مجموعة ${user.displayName}`).setColor(0xe91e63).setFooter({ text: `${cards.length} كرت · ${points} نقطة` });
     for (const tier of [...RARITY_ORDER].reverse()) {
       const owned = cards.filter((c) => c.rarity === tier);
@@ -293,7 +278,7 @@ export function collectionPage(gid: string, user: Pick<User, "id" | "displayName
     }
     arEmbed(embed);
   } else {
-    embed = cardEmbed(cards[page - 1]!, user.id);
+    embed = cardEmbed(gid, cards[page - 1]!, user.id);
   }
   const card = page ? cards[page - 1]! : null;
   return {
@@ -306,7 +291,7 @@ export function collectionPage(gid: string, user: Pick<User, "id" | "displayName
 // timestamp in their customId; they just aren't greyed out.
 const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** Grey out the browsing buttons once nobody has clicked for COLLECTION_IDLE_SECONDS. Renewed on every click. */
+/** Grey out the browsing buttons once nobody has clicked for a while (collectionIdleSeconds). Renewed on every click. */
 function armIdle(msg: Message, idle: { components: ActionRowBuilder<ButtonBuilder>[] }) {
   clearTimeout(idleTimers.get(msg.id));
   idleTimers.set(
@@ -314,7 +299,7 @@ function armIdle(msg: Message, idle: { components: ActionRowBuilder<ButtonBuilde
     setTimeout(() => {
       idleTimers.delete(msg.id);
       msg.edit(idle).catch(() => {});
-    }, COLLECTION_IDLE_SECONDS * 1000),
+    }, settingsFor(msg.guildId).collectionIdleSeconds * 1000),
   );
 }
 
@@ -331,7 +316,8 @@ const rushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** Arm the next drop for one server, at a random point inside the configured window. */
 function scheduleRush(guildId: string): void {
   clearTimeout(rushTimers.get(guildId));
-  const hours = RUSH_MIN_HOURS + Math.random() * (RUSH_MAX_HOURS - RUSH_MIN_HOURS);
+  const { rushMinHours: lo, rushMaxHours: hi } = settingsFor(guildId);
+  const hours = lo + Math.random() * (hi - lo);
   rushTimers.set(guildId, setTimeout(() => dropRush(guildId), hours * 3600 * 1000));
 }
 
@@ -339,11 +325,12 @@ function scheduleRush(guildId: string): void {
 async function dropRush(guildId: string): Promise<void> {
   try {
     const channelId = db.getLastChannel(guildId); // no activity yet -> nowhere to drop
-    const card = channelId ? pickCard(guildId, RUSH_MIN_RARITY, [], RUSH_MAX_RARITY) : null;
+    const { rushMinRarity, rushMaxRarity } = settingsFor(guildId);
+    const card = channelId ? pickCard(guildId, rushMinRarity, [], rushMaxRarity) : null;
     if (channelId && card) {
       const channel = await client.channels.fetch(channelId);
       if (channel?.isSendable()) {
-        const embed = cardEmbed(card)
+        const embed = cardEmbed(guildId, card)
           .setAuthor({ name: ar("⚡ كرت طائر") })
           .setFooter({ text: ar("مجاني · لا يستهلك طلبك · أول من يضغط يربحه") });
         await channel.send({ embeds: [embed], components: [rushRow(card.id)], files: cardFiles(card) });
@@ -475,8 +462,8 @@ const commands = [
     .setName("duel")
     .setDescription("تحدَّ عضواً: كرتك مقابل كرته، والفائز يأخذ الاثنين")
     .addUserOption((o) => o.setName("member").setDescription("الخصم").setRequired(true))
-    .addStringOption((o) => o.setName("my_card").setDescription("كرتك، أو حتى 10 كروت بينها فاصلة: 42,43").setRequired(true))
-    .addStringOption((o) => o.setName("their_card").setDescription("كرته، أو حتى 10 كروت بينها فاصلة").setRequired(true)),
+    .addStringOption((o) => o.setName("my_card").setDescription("كرتك، أو عدة كروت بينها فاصلة: 42,43").setRequired(true))
+    .addStringOption((o) => o.setName("their_card").setDescription("كرته، أو عدة كروت بينها فاصلة").setRequired(true)),
   new SlashCommandBuilder()
     .setName("rescan")
     .setDescription("(إدارة) افحص الصور الجديدة في مجلد images")
@@ -556,7 +543,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
   switch (i.commandName) {
     case "roll": {
       const used = db.rollsUsed(gid, uid);
-      if (used >= ROLLS_PER_RESET) return void i.reply({ ...note(`⏳ خلصت رميّاتك. تتجدد بعد ${fmtWait(db.secondsUntilRollRefill())}`, COLOR.warn), ...Ephemeral });
+      if (used >= settingsFor(gid).rollsPerReset) return void i.reply({ ...note(`⏳ خلصت رميّاتك. تتجدد بعد ${fmtWait(db.secondsUntilRollRefill(gid))}`, COLOR.warn), ...Ephemeral });
       const card = pickCard(gid, undefined, db.cardsRolledThisWindow(gid, uid));
       if (!card) {
         const any = Object.keys(db.poolCounts()).length > 0;
@@ -565,14 +552,14 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.deferReply(); // acknowledge within Discord's 3-second window
       db.recordRoll(gid, uid, card.id);
       const owner = db.ownerOf(gid, card.id);
-      const embed = cardEmbed(card, owner).setFooter({ text: ar(`رميّات متبقية: ${ROLLS_PER_RESET - used - 1}/${ROLLS_PER_RESET}`) });
+      const embed = cardEmbed(gid, card, owner).setFooter({ text: ar(`رميّات متبقية: ${settingsFor(gid).rollsPerReset - used - 1}/${settingsFor(gid).rollsPerReset}`) });
       if (owner) return void (await i.editReply({ embeds: [embed], files: cardFiles(card) }));
-      const expiresAt = Date.now() + CLAIM_WINDOW_SECONDS * 1000;
+      const expiresAt = Date.now() + settingsFor(gid).claimWindowSeconds * 1000;
       const msg = await i.editReply({ embeds: [embed], components: [claimRow(card.id, expiresAt)], files: cardFiles(card) });
       setTimeout(() => {
         // Only disable if nobody claimed it (a claim already replaced the row).
         if (!db.ownerOf(gid, card.id)) msg.edit({ components: [claimRow(card.id, expiresAt, true)] }).catch(() => {});
-      }, CLAIM_WINDOW_SECONDS * 1000);
+      }, settingsFor(gid).claimWindowSeconds * 1000);
       return;
     }
 
@@ -580,7 +567,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.deferReply();
       const picked = i.options.getUser("member");
       const user = { id: (picked ?? i.user).id, displayName: picked ? optionName(i, "member", picked) : callerName(i) };
-      const view = collectionPage(gid, user, 0, Date.now() + COLLECTION_IDLE_SECONDS * 1000);
+      const view = collectionPage(gid, user, 0, Date.now() + settingsFor(gid).collectionIdleSeconds * 1000);
       if (!view) return void i.editReply(note(`${user.displayName} ما عنده كروت بعد`));
       armIdle(await i.editReply(view.payload), view.idle);
       return;
@@ -590,7 +577,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       const c = db.findCard(i.options.getString("name", true));
       if (!c) return void i.reply({ ...note("ما لقيت كرت بهذا الرقم أو الاسم", COLOR.warn), ...Ephemeral });
       await i.deferReply();
-      return void i.editReply({ embeds: [cardEmbed(c, db.ownerOf(gid, c.id))], files: cardFiles(c) });
+      return void i.editReply({ embeds: [cardEmbed(gid, c, db.ownerOf(gid, c.id))], files: cardFiles(c) });
     }
 
     case "top": {
@@ -667,13 +654,13 @@ async function handleCommand(i: ChatInputCommandInteraction) {
           { name: `${optionName(i, "member", target)} يعطي`, value: `${RARITIES[theirs.rarity].emoji} ${theirs.name} \`#${theirs.id}\``, inline: true },
         )
         .setFooter({ text: "العرض صالح 5 دقائق" });
-      const expiresAt = Date.now() + EXCHANGE_WINDOW_SECONDS * 1000;
+      const expiresAt = Date.now() + settingsFor(gid).exchangeWindowSeconds * 1000;
       const msg = await i.reply({ content: `${target}`, embeds: [arEmbed(e)], components: [exchangeRow(uid, target.id, mine.id, theirs.id, expiresAt)], withResponse: true });
       setTimeout(() => {
         // Still pending? Only then mark it expired (accept/decline already rewrote the message).
         if (db.ownerOf(gid, mine.id) === uid && db.ownerOf(gid, theirs.id) === target.id)
           msg.resource?.message?.edit({ content: "", ...note("⌛ انتهى وقت العرض", COLOR.warn), components: [] }).catch(() => {});
-      }, EXCHANGE_WINDOW_SECONDS * 1000);
+      }, settingsFor(gid).exchangeWindowSeconds * 1000);
       return;
     }
 
@@ -692,6 +679,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       if (!res.ok) return void i.editReply(note("ما قدرت أنزّل الملف", COLOR.warn));
       try {
         db.replaceDatabase(new Uint8Array(await res.arrayBuffer()));
+        clearSettingsCache(); // the restored file may carry different dashboard settings
       } catch (e) {
         return void i.editReply(note(`الملف ليس قاعدة بيانات صالحة (${(e as Error).message})`, COLOR.warn));
       }
@@ -701,12 +689,12 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     }
 
     case "usage": {
-      const left = ROLLS_PER_RESET - db.rollsUsed(gid, uid), claimWait = db.secondsUntilClaim(gid, uid);
+      const left = settingsFor(gid).rollsPerReset - db.rollsUsed(gid, uid), claimWait = db.secondsUntilClaim(gid, uid);
       const embed = new EmbedBuilder()
         .setAuthor({ name: ar(`⏳ رصيد ${callerName(i)}`) })
         .setColor(left > 0 || claimWait === 0 ? COLOR.ok : COLOR.warn)
         .addFields(
-          { name: "🎲 الرميّات", value: `**${left}/${ROLLS_PER_RESET}** متبقية\n${left === ROLLS_PER_RESET ? "كاملة" : `تتجدد بعد ${fmtWait(db.secondsUntilRollRefill())}`}`, inline: true },
+          { name: "🎲 الرميّات", value: `**${left}/${settingsFor(gid).rollsPerReset}** متبقية\n${left === settingsFor(gid).rollsPerReset ? "كاملة" : `تتجدد بعد ${fmtWait(db.secondsUntilRollRefill(gid))}`}`, inline: true },
           { name: "💍 الطلب", value: claimWait === 0 ? "**متاح الآن**" : `القادم بعد **${fmtWait(claimWait)}**`, inline: true },
         );
       return void i.reply({ embeds: [arEmbed(embed)], ...Ephemeral });
@@ -741,9 +729,9 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       if (target.id === uid) return void i.reply({ ...note("ما تقدر تتحدى نفسك", COLOR.warn), ...Ephemeral });
       if (target.bot) return void i.reply({ ...note("ما تقدر تتحدى بوت", COLOR.warn), ...Ephemeral });
 
-      const mineParsed = parseStake(i.options.getString("my_card", true));
+      const mineParsed = parseStake(gid, i.options.getString("my_card", true));
       if ("error" in mineParsed) return void i.reply({ ...note(mineParsed.error, COLOR.warn), ...Ephemeral });
-      const theirsParsed = parseStake(i.options.getString("their_card", true));
+      const theirsParsed = parseStake(gid, i.options.getString("their_card", true));
       if ("error" in theirsParsed) return void i.reply({ ...note(theirsParsed.error, COLOR.warn), ...Ephemeral });
       const mine = mineParsed.cards, theirs = theirsParsed.cards;
 
@@ -757,7 +745,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
         return void i.reply({ ...note("نفس الكرت على الجهتين", COLOR.warn), ...Ephemeral });
       }
 
-      const expiresAt = Date.now() + DUEL_WINDOW_SECONDS * 1000;
+      const expiresAt = Date.now() + settingsFor(gid).duelWindowSeconds * 1000;
       const key = rememberDuel({ guildId: gid, challenger: uid, target: target.id, mine, theirs, expiresAt });
       const embed = new EmbedBuilder()
         .setAuthor({ name: ar("⚔️ تحدٍ") })
@@ -765,8 +753,8 @@ async function handleCommand(i: ChatInputCommandInteraction) {
         .setDescription(ar("الفائز يأخذ كل الكروت."))
         .setColor(COLOR.warn)
         .addFields(
-          { name: `${callerName(i)} يراهن بـ`, value: stakeBlock(mine), inline: true },
-          { name: `${optionName(i, "member", target)} يراهن بـ`, value: stakeBlock(theirs), inline: true },
+          { name: `${callerName(i)} يراهن بـ`, value: stakeBlock(gid, mine), inline: true },
+          { name: `${optionName(i, "member", target)} يراهن بـ`, value: stakeBlock(gid, theirs), inline: true },
         )
         .setFooter({ text: "العرض صالح 5 دقائق" });
       await i.reply({ content: `${target}`, embeds: [arEmbed(embed)], components: [duelRow(key)] });
@@ -774,7 +762,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
         if (pendingDuels.delete(key)) {
           i.editReply({ content: "", ...note("⌛ انتهى وقت التحدي", COLOR.warn), components: [] }).catch(() => {});
         }
-      }, DUEL_WINDOW_SECONDS * 1000);
+      }, settingsFor(gid).duelWindowSeconds * 1000);
       return;
     }
 
@@ -803,7 +791,7 @@ async function handleButton(i: ButtonInteraction) {
     if (claimWait > 0) return void i.reply({ ...note(`⏳ طلبك القادم بعد ${fmtWait(claimWait)}`, COLOR.warn), ...Ephemeral });
     if (!db.claim(gid, cardId, uid)) return void i.reply({ ...note("💔 سبقك أحد إليها", COLOR.warn), ...Ephemeral });
     const footer = i.message.embeds[0]?.footer?.text;
-    const embed = cardEmbed(card, uid);
+    const embed = cardEmbed(gid, card, uid);
     if (footer) embed.setFooter({ text: footer });
     await i.update({ embeds: [embed], components: [claimRow(cardId, expiresAt, true)] });
     await i.followUp(note(`💍 ${i.user} حصل على **${card.name}**!\nطلبو الجاي بعد ${fmtWait(db.secondsUntilClaim(gid, uid))}`, COLOR.ok));
@@ -815,7 +803,7 @@ async function handleButton(i: ButtonInteraction) {
     if (Date.now() > Number(expStr)) return void i.reply({ ...note("⌛ انتهت الجلسة. اكتب /collection من جديد", COLOR.warn), ...Ephemeral });
     const member = await i.guild?.members.fetch(userId).catch(() => null);
     const user = member ?? (await client.users.fetch(userId));
-    const view = collectionPage(gid, user, Number(pageStr), Date.now() + COLLECTION_IDLE_SECONDS * 1000);
+    const view = collectionPage(gid, user, Number(pageStr), Date.now() + settingsFor(gid).collectionIdleSeconds * 1000);
     if (!view) return void i.update({ content: "", ...note(`${user.displayName} ما عنده كروت بعد`), components: [] });
     await i.update(view.payload);
     return void armIdle(i.message, view.idle);
@@ -826,7 +814,7 @@ async function handleButton(i: ButtonInteraction) {
     if (!card) return;
     // No expiry and no daily cost: the whole point of a rush card.
     if (!db.claimFree(gid, card.id, uid)) return void i.reply({ content: ar("💔 سبقك أحد إليها"), ...Ephemeral });
-    await i.update({ embeds: [cardEmbed(card, uid)], components: [rushRow(card.id, true)] });
+    await i.update({ embeds: [cardEmbed(gid, card, uid)], components: [rushRow(card.id, true)] });
     await i.followUp(note(`⚡ ${i.user} خطف **${card.name}** مجاناً!`, COLOR.ok));
     return void (await checkSeasonEnd(gid));
   }
@@ -860,20 +848,20 @@ async function handleButton(i: ButtonInteraction) {
     const spoils = [...mine, ...theirs];
 
     // Identical frames for both sides: nothing here can be read as a hint at the outcome.
-    const stakes = `${stakeBlock(mine)}\n\n${stakeBlock(theirs)}`;
+    const stakes = `${stakeBlock(gid, mine)}\n\n${stakeBlock(gid, theirs)}`;
     await i.update({ content: "", embeds: [arEmbed(spinEmbed(0, challengerName, targetName, stakes))], components: [] });
     for (let frame = 1; frame < SPIN_FRAMES; frame++) {
-      await sleep(DUEL_SUSPENSE_MS);
+      await sleep(settingsFor(gid).duelSuspenseMs);
       await i.editReply({ embeds: [arEmbed(spinEmbed(frame, challengerName, targetName, stakes))] }).catch(() => {});
     }
-    await sleep(DUEL_SUSPENSE_MS);
+    await sleep(settingsFor(gid).duelSuspenseMs);
 
     const result = new EmbedBuilder()
       .setAuthor({ name: ar("⚔️ نتيجة التحدي") })
       .setTitle(ar(`🎉 فاز ${winnerName}`))
       .setDescription(ar(`<@${winner}> أخذ كل الكروت، و<@${loser}> خسر رهانه.\nحظ أوفر يا ${loserName}.`))
       .setColor(COLOR.gold)
-      .addFields({ name: ar("الغنيمة"), value: stakeBlock(spoils) }); // summarised: a raw list of every spoil overflows the 1024-char field and Discord drops the edit
+      .addFields({ name: ar("الغنيمة"), value: stakeBlock(gid, spoils) }); // summarised: a raw list of every spoil overflows the 1024-char field and Discord drops the edit
     await i.editReply({ embeds: [arEmbed(result)], components: [] }).catch(() => {});
     return;
   }

@@ -4,7 +4,8 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DB_PATH, MEDAL_POINTS, RARITIES, ROLL_RESET_HOURS, type Rarity } from "./config";
+import { DB_PATH, type Rarity } from "./config";
+import { settingsFor } from "./settings"; // settings.ts reads its rows back through this module; both only call each other at run time
 
 export interface Card {
   id: number;
@@ -72,6 +73,10 @@ export function init(): void {
       claimed_at REAL NOT NULL,
       cooldown REAL NOT NULL DEFAULT 10800,
       PRIMARY KEY (guild_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      scope TEXT PRIMARY KEY,  -- 'global' or a server id
+      data TEXT NOT NULL       -- JSON: only the values changed from the default
     );
     CREATE TABLE IF NOT EXISTS guild_channel (
       guild_id INTEGER PRIMARY KEY,
@@ -161,10 +166,11 @@ export function seasonTop(guildId: string, season: number, limit = 10): Standing
        WHERE k.guild_id = ? AND k.season = ? GROUP BY k.user_id, c.rarity`,
     )
     .all(guildId, season);
+  const tiers = settingsFor(guildId).tiers;
   const totals = new Map<string, Standing>();
   for (const r of rows) {
     const t = totals.get(r.user_id) ?? { userId: r.user_id, points: 0, count: 0, firstAt: Infinity };
-    t.points += RARITIES[r.rarity].points * r.n;
+    t.points += tiers[r.rarity].points * r.n;
     t.count += r.n;
     t.firstAt = Math.min(t.firstAt, r.first_at);
     totals.set(r.user_id, t);
@@ -181,10 +187,11 @@ export function seasonTop(guildId: string, season: number, limit = 10): Standing
  */
 export function closeSeason(guildId: string): { userId: string; place: number; points: number }[] {
   const season = currentSeason(guildId);
-  const medals = seasonTop(guildId, season, MEDAL_POINTS.length).map((s, i) => ({
+  const medalPoints = settingsFor(guildId).medalPoints;
+  const medals = seasonTop(guildId, season, medalPoints.length).map((s, i) => ({
     userId: s.userId,
     place: i + 1,
-    points: MEDAL_POINTS[i]!,
+    points: medalPoints[i]!,
   }));
   if (!medals.length) return []; // nobody played; leave the season open
   const insert = db.query("INSERT OR REPLACE INTO season_medals (guild_id, season, user_id, place, points) VALUES (?, ?, ?, ?, ?)");
@@ -207,6 +214,19 @@ export function allTimeLeaderboard(guildId: string, limit = 10): { userId: strin
        GROUP BY user_id ORDER BY points DESC, golds DESC LIMIT ?`,
     )
     .all(guildId, limit);
+}
+
+// ---------- settings (edited from the dashboard) ----------
+
+export function readSettings(scope: string): Record<string, unknown> {
+  const row = db.query<{ data: string }, [string]>("SELECT data FROM settings WHERE scope = ?").get(scope);
+  return row ? (JSON.parse(row.data) as Record<string, unknown>) : {};
+}
+
+/** Store a scope's overrides. An empty object removes the row, so the scope inherits everything again. */
+export function writeSettings(scope: string, data: Record<string, unknown>): void {
+  if (!Object.keys(data).length) db.query("DELETE FROM settings WHERE scope = ?").run(scope);
+  else db.query("INSERT INTO settings (scope, data) VALUES (?, ?) ON CONFLICT(scope) DO UPDATE SET data = excluded.data").run(scope, JSON.stringify(data));
 }
 
 // ---------- admin ----------
@@ -351,7 +371,7 @@ export function claim(guildId: string, cardId: number, userId: string): boolean 
     return false;
   }
   const rarity = getCard(cardId)?.rarity;
-  const cooldown = (rarity ? RARITIES[rarity].claimHours : 1) * 3600; // rarer card, longer wait
+  const cooldown = (rarity ? settingsFor(guildId).tiers[rarity].claimHours : 1) * 3600; // rarer card, longer wait
   db.query("INSERT OR REPLACE INTO last_claim (guild_id, user_id, claimed_at, cooldown) VALUES (?, ?, ?, ?)").run(guildId, userId, now(), cooldown);
   return true;
 }
@@ -419,26 +439,26 @@ export function claimFree(guildId: string, cardId: number, userId: string): bool
 // ---------- limits: rolls refill in shared windows, the claim is a personal cooldown ----------
 
 /** Start of the current roll window. Windows are counted from local midnight so everyone refills together. */
-export function rollWindowStart(): number {
+export function rollWindowStart(guildId?: string): number {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  const midnight = d.getTime() / 1000, len = ROLL_RESET_HOURS * 3600;
+  const midnight = d.getTime() / 1000, len = settingsFor(guildId).rollResetHours * 3600;
   return midnight + Math.floor((now() - midnight) / len) * len;
 }
 
-export function secondsUntilRollRefill(): number {
-  return rollWindowStart() + ROLL_RESET_HOURS * 3600 - now();
+export function secondsUntilRollRefill(guildId?: string): number {
+  return rollWindowStart(guildId) + settingsFor(guildId).rollResetHours * 3600 - now();
 }
 
 export function rollsUsed(guildId: string, userId: string): number {
   return db
     .query<{ n: number }, [string, string, number]>("SELECT COUNT(*) AS n FROM rolls WHERE guild_id = ? AND user_id = ? AND rolled_at >= ?")
-    .get(guildId, userId, rollWindowStart())!.n;
+    .get(guildId, userId, rollWindowStart(guildId))!.n;
 }
 
 export function recordRoll(guildId: string, userId: string, cardId: number): void {
   db.query("INSERT INTO rolls (guild_id, user_id, rolled_at, card_id) VALUES (?, ?, ?, ?)").run(guildId, userId, now(), cardId);
-  db.query("DELETE FROM rolls WHERE rolled_at < ?").run(rollWindowStart());
+  db.query("DELETE FROM rolls WHERE guild_id = ? AND rolled_at < ?").run(guildId, rollWindowStart(guildId));
 }
 
 /** Cards this player has already been shown this window, so their remaining rolls can avoid them. */
@@ -447,7 +467,7 @@ export function cardsRolledThisWindow(guildId: string, userId: string): number[]
     .query<{ card_id: number }, [string, string, number]>(
       "SELECT card_id FROM rolls WHERE guild_id = ? AND user_id = ? AND rolled_at >= ? AND card_id IS NOT NULL",
     )
-    .all(guildId, userId, rollWindowStart())
+    .all(guildId, userId, rollWindowStart(guildId))
     .map((r) => r.card_id);
 }
 

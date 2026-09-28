@@ -27,7 +27,7 @@ export const SECRET_RARITIES: Rarity[] = ["المنتخب", "كيرك"];
 export const ROLLS_PER_RESET = 5;        // rolls each player gets per window
 export const ROLL_RESET_HOURS = 2;       // rolls refill for everyone together every this many hours (windows start at midnight)
 // One claim at a time: the wait before the next one depends on the card you claimed (claimHours above).
-export const CLAIM_WINDOW_SECONDS = 30;  // how long the claim button stays alive after a roll
+export const CLAIM_WINDOW_SECONDS = 90;  // how long the claim button stays alive after a roll
 export const EXCHANGE_WINDOW_SECONDS = 300;
 export const COLLECTION_IDLE_SECONDS = 120; // /collection browsing buttons grey out after this long without a click
 export const ROLL_ONLY_UNCLAIMED = true; // true: /roll only shows cards nobody in the server owns yet

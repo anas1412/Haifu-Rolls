@@ -7,7 +7,8 @@
  * hidden form elsewhere can't move cards while you are signed in.
  */
 import type { Client, Guild } from "discord.js";
-import { MEDAL_POINTS, RARITIES, RARITY_ORDER, SECRET_RARITIES } from "./config";
+import { RARITIES, RARITY_ORDER, SECRET_RARITIES } from "./config";
+import { DEFAULTS, FIELDS, overridesFor, saveOverrides, settingsFor } from "./settings";
 import * as db from "./db";
 import type { SeasonEnd } from "./index";
 
@@ -107,8 +108,11 @@ async function serverDetail(client: Client, id: string) {
   const { deck } = deckTotals(id);
   const standings = db.seasonTop(id, season, 500);
   const allTime = db.allTimeLeaderboard(id, 10);
+  const s = settingsFor(id);
   return {
     ...serverCard(client, id),
+    points: Object.fromEntries(RARITY_ORDER.map((r) => [r, s.tiers[r].points])), // this server's values
+    medals: s.medalPoints,
     deck: RARITY_ORDER.map((rarity) => ({ rarity, ...(deck.find((d) => d.rarity === rarity) ?? { total: 0, claimed: 0 }) })),
     players: await Promise.all(standings.map(async (s) => ({ ...(await person(client, id, s.userId)), points: s.points, cards: s.count }))),
     allTime: await Promise.all(allTime.map(async (a) => ({ ...(await person(client, id, a.userId)), ...a }))),
@@ -159,15 +163,17 @@ export async function adminApi(req: Request, client: Client, endSeason: EndSeaso
   if (path === "/meta") {
     return json({
       imageBase: "/images", // served by web.ts from the same folder the bot reads
-      medals: MEDAL_POINTS,
+      medals: settingsFor().medalPoints,
       rarities: RARITY_ORDER.map((key) => ({
         key,
-        points: RARITIES[key].points,
+        points: settingsFor().tiers[key].points,
         color: `#${RARITIES[key].color.toString(16).padStart(6, "0")}`,
         secret: SECRET_RARITIES.includes(key),
       })),
     });
   }
+
+  if (path === "/settings/global") return settingsRoute(req, "global");
 
   if (path === "/servers") {
     const ids = new Set([...client.guilds.cache.keys(), ...db.guildsWithData()]);
@@ -180,6 +186,7 @@ export async function adminApi(req: Request, client: Client, endSeason: EndSeaso
   const rest = route[2] ?? "";
 
   if (rest === "" && req.method === "GET") return json(await serverDetail(client, guildId));
+  if (rest === "/settings") return settingsRoute(req, guildId);
 
   if (rest === "/cards" && req.method === "GET") {
     const q = url.searchParams;
@@ -236,6 +243,26 @@ export async function adminApi(req: Request, client: Client, endSeason: EndSeaso
   }
 
   return fail(404, "Nothing here.");
+}
+
+/**
+ * Read or replace one scope's settings. The page gets the overrides (what was changed here), what it
+ * inherits (the code defaults for global, the global values for a server), and the result in effect.
+ */
+async function settingsRoute(req: Request, scope: string): Promise<Response> {
+  if (req.method === "PUT") {
+    const { overrides } = await body(req);
+    const r = saveOverrides(scope, (overrides ?? {}) as Record<string, unknown>);
+    if (!r.ok) return json({ error: "Some values need fixing.", errors: r.errors }, 422);
+  } else if (req.method !== "GET") return fail(405, "Not allowed.");
+  return json({
+    scope,
+    fields: FIELDS,
+    rarities: RARITY_ORDER.map((key) => ({ key, secret: SECRET_RARITIES.includes(key), color: `#${RARITIES[key].color.toString(16).padStart(6, "0")}` })),
+    overrides: overridesFor(scope),
+    inherited: scope === "global" ? DEFAULTS : settingsFor(),
+    effective: scope === "global" ? settingsFor() : settingsFor(scope),
+  });
 }
 
 export const _internals = { tokenIsValid, issueToken, timingSafeEqual };

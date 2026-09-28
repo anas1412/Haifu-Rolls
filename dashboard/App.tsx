@@ -3,6 +3,7 @@ import icon from "./icon.png";
 import { api, type Meta, type ServerCard, type ServerDetail, type Status, signedOut } from "./api";
 import { type Route, ToastContext, usePoll, useRoute, useToasts } from "./hooks";
 import { Avatar, Empty, Name, Progress, Skeleton, plural, since } from "./ui";
+import { SettingsForm } from "./settings";
 import { Cards, Overview, Players, Season } from "./views";
 
 export function App() {
@@ -66,7 +67,7 @@ function Login({ onIn }: { onIn: () => void }) {
   );
 }
 
-const TAB_LABELS: Record<Route["tab"], string> = { overview: "Overview", cards: "Cards", players: "Players", season: "Season" };
+const TAB_LABELS: Record<Route["tab"], string> = { overview: "Overview", cards: "Cards", players: "Players", season: "Season", settings: "Settings" };
 
 function Console({ onOut }: { onOut: () => void }) {
   const [route, go] = useRoute();
@@ -78,8 +79,8 @@ function Console({ onOut }: { onOut: () => void }) {
   useEffect(() => { api<Meta>("/meta").then(setMeta).catch(() => {}); }, []);
   // Land on the busiest server when nothing is picked yet.
   useEffect(() => {
-    if (!route.server && servers.data?.length) go({ server: servers.data[0]!.id, tab: "overview", owner: "" });
-  }, [route.server, servers.data, go]);
+    if (!route.server && !route.global && servers.data?.length) go({ server: servers.data[0]!.id, tab: "overview", owner: "" });
+  }, [route.server, route.global, servers.data, go]);
 
   async function signOut() {
     await api("/logout", { method: "POST" }).catch(() => {});
@@ -103,11 +104,16 @@ function Console({ onOut }: { onOut: () => void }) {
           </div>
         </div>
 
+        <button className={`server global-link${route.global ? " active" : ""}`} onClick={() => { go({ global: true, server: null }); setMenu(false); }}>
+          <span className="server-blank"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg></span>
+          <span className="server-text"><b>Global settings</b><small>For every server</small></span>
+        </button>
+
         <nav className="server-list" aria-label="Servers">
           <span className="label">Servers {servers.data && <em>{servers.data.length}</em>}</span>
           {!servers.data ? <Skeleton h={180} /> : servers.data.map((srv) => (
             <button key={srv.id} className={`server${route.server === srv.id ? " active" : ""}`}
-              onClick={() => { go({ server: srv.id, tab: route.tab, owner: "" }); setMenu(false); }}>
+              onClick={() => { go({ global: false, server: srv.id, tab: route.tab, owner: "" }); setMenu(false); }}>
               {srv.icon ? <img src={srv.icon} alt="" width={34} height={34} /> : <span className="server-blank">{[...srv.name][0]}</span>}
               <span className="server-text">
                 <Name>{srv.name}</Name>
@@ -124,7 +130,12 @@ function Console({ onOut }: { onOut: () => void }) {
 
       <main className="main">
         <button className="btn ghost only-sm menu-btn" onClick={() => setMenu(true)}>Servers</button>
-        {route.server && meta ? <ServerView key={route.server} id={route.server} route={route} go={go} meta={meta} onChange={servers.reload} />
+        {route.global ? (
+          <>
+            <header className="server-head"><div><h1>Global settings</h1></div></header>
+            <div className="tab-body"><SettingsForm scope="global" /></div>
+          </>
+        ) : route.server && meta ? <ServerView key={route.server} id={route.server} route={route} go={go} meta={meta} onChange={servers.reload} />
           : servers.data && !servers.data.length ? <Empty title="The bot isn't in any server yet">Invite it to a server and it will show up here.</Empty>
           : <Skeleton h={320} />}
       </main>
@@ -172,6 +183,7 @@ function ServerView({ id, route, go, meta, onChange }: {
         {route.tab === "cards" && <Cards server={server} meta={meta} owner={route.owner} setOwner={(o) => go({ owner: o })} onChanged={refresh} />}
         {route.tab === "players" && <Players server={server} onCards={(u) => go({ tab: "cards", owner: u })} />}
         {route.tab === "season" && <Season server={server} meta={meta} onEnded={refresh} />}
+        {route.tab === "settings" && <SettingsForm scope={server.id} serverName={server.name} />}
       </div>
     </>
   );

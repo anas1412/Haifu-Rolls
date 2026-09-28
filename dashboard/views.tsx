@@ -223,7 +223,7 @@ function CardPanel({ card, server, meta, onClose, onChanged }: {
         <img className="card-big" src={`${meta.imageBase}/${card.file}`} alt="" style={{ borderColor: r?.color }} />
         <div className="card-info">
           <h3 className="card-name"><Name>{card.name}</Name></h3>
-          <p className="facts"><RarityTag meta={meta} rarity={card.rarity} /><span>{plural(r?.points ?? 0, "point")}</span></p>
+          <p className="facts"><RarityTag meta={meta} rarity={card.rarity} /><span>{plural(server.points[card.rarity] ?? r?.points ?? 0, "point")}</span></p>
 
           <div className="owner-box">
             <span className="label">Owner in {server.name}</span>
@@ -331,7 +331,7 @@ export function Season({ server, meta, onEnded }: { server: ServerDetail; meta: 
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SeasonResult | null>(null);
   const toast = useToast();
-  const medals = meta.medals;
+  const medals = server.medals;
   const top = server.players.slice(0, medals.length);
 
   async function end() {

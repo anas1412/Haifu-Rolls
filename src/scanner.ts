@@ -3,7 +3,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import * as db from "./db";
-import { IMAGES_DIR, RARITIES, RARITY_ORDER, SECRET_RARITIES, type Rarity } from "./config";
+import { IMAGES_DIR, RARITY_ORDER, SECRET_RARITIES, type Rarity } from "./config";
+import { settingsFor } from "./settings";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const SEED_FILE = "seed.json";
@@ -56,10 +57,11 @@ const pick = <T>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)]!;
 const OPEN_TIERS = RARITY_ORDER.filter((r) => !SECRET_RARITIES.includes(r));
 
 function weightedRarity(): Rarity {
-  const total = OPEN_TIERS.reduce((s, r) => s + RARITIES[r].weight, 0);
+  const tiers = settingsFor().tiers; // new photos follow the global odds
+  const total = OPEN_TIERS.reduce((s, r) => s + tiers[r].weight, 0);
   let roll = Math.random() * total;
   for (const r of OPEN_TIERS) {
-    roll -= RARITIES[r].weight;
+    roll -= tiers[r].weight;
     if (roll < 0) return r;
   }
   return RARITY_ORDER[0]!;

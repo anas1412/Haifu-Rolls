@@ -223,19 +223,19 @@ test("the stake parser accepts comma lists and rejects bad input", async () => {
   const one = db.addCard("p1.jpg", "كرت واحد", "نادرة", "d");
   const two = db.addCard("p2.jpg", "كرت اثنان", "مميزة", "d");
 
-  expect(parseStake(`${one},${two}`)).toEqual({ cards: [db.getCard(one)!, db.getCard(two)!] });
-  expect(parseStake(` ${one} , #${two} `)).toEqual({ cards: [db.getCard(one)!, db.getCard(two)!] }); // spaces and # are fine
-  expect(parseStake(`${one}`)).toEqual({ cards: [db.getCard(one)!] });
-  expect(parseStake(`${one},#${one}`)).toEqual({ error: `كرت مكرر: كرت واحد` });  // same card written twice
-  expect(parseStake("")).toEqual({ error: "ما حددت أي كرت" });
-  expect(parseStake("999999")).toEqual({ error: "ما لقيت كرت: 999999" });
-  const many = parseStake("1,2,3,4,5,6");
+  expect(parseStake("stake-guild", `${one},${two}`)).toEqual({ cards: [db.getCard(one)!, db.getCard(two)!] });
+  expect(parseStake("stake-guild", ` ${one} , #${two} `)).toEqual({ cards: [db.getCard(one)!, db.getCard(two)!] }); // spaces and # are fine
+  expect(parseStake("stake-guild", `${one}`)).toEqual({ cards: [db.getCard(one)!] });
+  expect(parseStake("stake-guild", `${one},#${one}`)).toEqual({ error: `كرت مكرر: كرت واحد` });  // same card written twice
+  expect(parseStake("stake-guild", "")).toEqual({ error: "ما حددت أي كرت" });
+  expect(parseStake("stake-guild", "999999")).toEqual({ error: "ما لقيت كرت: 999999" });
+  const many = parseStake("stake-guild", "1,2,3,4,5,6");
   expect("cards" in many && many.cards).toHaveLength(6);
 
-  const ten = parseStake("1,2,3,4,5,6,7,8,9,10");
+  const ten = parseStake("stake-guild", "1,2,3,4,5,6,7,8,9,10");
   expect("cards" in ten && ten.cards).toHaveLength(10);          // the cap itself is allowed
-  expect(parseStake("1,2,3,4,5,6,7,8,9,10,11")).toEqual({ error: "أقصى 10 كروت في التحدي" });
-  expect(parseStake("all")).toEqual({ error: "ما لقيت كرت: all" }); // no whole-collection shortcut
+  expect(parseStake("stake-guild", "1,2,3,4,5,6,7,8,9,10,11")).toEqual({ error: "أقصى 10 كروت في التحدي" });
+  expect(parseStake("stake-guild", "all")).toEqual({ error: "ما لقيت كرت: all" }); // no whole-collection shortcut
 });
 
 test("a huge stake still fits inside a Discord embed field", async () => {
@@ -243,7 +243,7 @@ test("a huge stake still fits inside a Discord embed field", async () => {
   const many = Array.from({ length: 100 }, (_, n) =>
     db.getCard(db.addCard(`big${n}.jpg`, `كرت طويل الاسم رقم ${n}`, "الملكة", "d"))!,
   );
-  const rendered = ar(stakeBlock(many)); // ar() is what actually reaches Discord
+  const rendered = ar(stakeBlock("stake-guild", many)); // ar() is what actually reaches Discord
   expect(rendered.length).toBeLessThan(1024); // Discord rejects the whole message past this
   expect(rendered).toContain("100 كرت");      // the total still counts every card
   expect(rendered).toContain("2500 نقطة");    // 100 queens
@@ -252,9 +252,9 @@ test("a huge stake still fits inside a Discord embed field", async () => {
   // The duel embeds put BOTH stakes in a single "على المحك" field, and the spoils of a duel are
   // both sides added together. A 38-card duel once silently failed here: Discord rejected the
   // edit, the message froze on the last spin frame, and the cards had already changed hands.
-  const bothSides = `${stakeBlock(many)}\n\n${stakeBlock(many)}`;
+  const bothSides = `${stakeBlock("stake-guild", many)}\n\n${stakeBlock("stake-guild", many)}`;
   expect(ar(bothSides).length).toBeLessThan(1024);
-  expect(ar(stakeBlock([...many, ...many])).length).toBeLessThan(1024);
+  expect(ar(stakeBlock("stake-guild", [...many, ...many])).length).toBeLessThan(1024);
 });
 
 test("rolls refill in shared 2h windows; the claim is a cooldown from your own claim", () => {
@@ -330,4 +330,46 @@ test("the wait after a claim depends on the card: 1h common to rare, 3h legendar
   expect([hoursFor("عادية", 1), hoursFor("مميزة", 1), hoursFor("نادرة", 1)]).toEqual([1, 1, 1]);
   expect([hoursFor("أسطورية", 1), hoursFor("الملكة", 1)]).toEqual([3, 3]);
   expect([hoursFor("المنتخب", 1), hoursFor("كيرك", 1)]).toEqual([5, 5]);
+});
+
+test("settings layer: default, then global, then each server; a server with no overrides follows global", async () => {
+  const { settingsFor, saveOverrides, DEFAULTS } = await import("./settings");
+  const a = "settings-a", b = "settings-b";
+  expect(settingsFor(a).claimWindowSeconds).toBe(DEFAULTS.claimWindowSeconds);
+
+  expect(saveOverrides("global", { claimWindowSeconds: 60 }).ok).toBe(true);
+  expect(settingsFor(a).claimWindowSeconds).toBe(60);           // global reaches every server
+  expect(saveOverrides(a, { claimWindowSeconds: 120, tiers: { "الملكة": { points: 40 } } }).ok).toBe(true);
+  expect(settingsFor(a).claimWindowSeconds).toBe(120);          // the server's own value wins
+  expect(settingsFor(b).claimWindowSeconds).toBe(60);           // other servers keep following global
+  expect(settingsFor(a).tiers["الملكة"]).toEqual({ ...DEFAULTS.tiers["الملكة"], points: 40 }); // only the changed part moves
+
+  expect(saveOverrides(a, {}).ok).toBe(true);                   // clearing a server: back to global
+  expect(settingsFor(a).claimWindowSeconds).toBe(60);
+  expect(saveOverrides("global", {}).ok).toBe(true);            // clearing global: back to the code default
+  expect(settingsFor(a).claimWindowSeconds).toBe(DEFAULTS.claimWindowSeconds);
+});
+
+test("settings refuse bad values and save nothing when any value is wrong", async () => {
+  const { settingsFor, saveOverrides } = await import("./settings");
+  const g = "settings-bad", before = settingsFor(g);
+  const r = saveOverrides(g, { rollsPerReset: 2.5, claimWindowSeconds: 1, rollOnlyUnclaimed: "yes", rushMinRarity: "gold", tiers: { "عادية": { weight: -1 } } });
+  expect(r.ok).toBe(false);
+  expect(!r.ok && Object.keys(r.errors).sort()).toEqual(["claimWindowSeconds", "rollOnlyUnclaimed", "rollsPerReset", "rushMinRarity", "tiers.عادية.weight"].sort());
+  // one good value next to a bad combination: still nothing is stored
+  expect(saveOverrides(g, { claimWindowSeconds: 45, rushMinHours: 10, rushMaxHours: 3 }).ok).toBe(false);
+  expect(saveOverrides(g, { rushMinRarity: "الملكة", rushMaxRarity: "عادية" }).ok).toBe(false);
+  expect(settingsFor(g)).toEqual(before);
+});
+
+test("the game uses the server's own settings: points, claim wait and medals", async () => {
+  const { saveOverrides } = await import("./settings");
+  const g = "settings-live";
+  expect(saveOverrides(g, { tiers: { "عادية": { points: 7, claimHours: 2 } }, medalPoints: [9, 0, 0, 0, 0] }).ok).toBe(true);
+  const card = db.addCard("st-1.jpg", "كرت الإعدادات", "عادية", "d");
+  db.claim(g, card, "setter");
+  expect(db.seasonTop(g, db.currentSeason(g))[0]!.points).toBe(7);           // this server's point value
+  expect(Math.round(db.secondsUntilClaim(g, "setter") / 3600)).toBe(2);      // this server's wait for that tier
+  expect(db.closeSeason(g)).toEqual([{ userId: "setter", place: 1, points: 9 }]); // this server's medals
+  expect(saveOverrides(g, {}).ok).toBe(true);
 });

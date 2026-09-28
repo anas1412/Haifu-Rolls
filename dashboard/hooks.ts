@@ -62,15 +62,19 @@ export function useToasts() {
 
 // ---------- routing ----------
 
-/** The address bar keeps your place: #/s/<server>/<tab>, so a refresh or a shared link lands in the same view. */
-export type Route = { server: string | null; tab: "overview" | "cards" | "players" | "season"; owner: string };
-const TABS = ["overview", "cards", "players", "season"] as const;
+/**
+ * The address bar keeps your place: #/s/<server>/<tab>, or #/settings for the global settings,
+ * so a refresh or a shared link lands in the same view.
+ */
+export type Route = { server: string | null; global: boolean; tab: "overview" | "cards" | "players" | "season" | "settings"; owner: string };
+const TABS = ["overview", "cards", "players", "season", "settings"] as const;
 
 function parse(): Route {
   const [path = "", query = ""] = location.hash.replace(/^#/, "").split("?");
   const [, s, server, tab] = path.split("/");
   const owner = new URLSearchParams(query).get("owner") ?? "";
   return {
+    global: s === "settings",
     server: s === "s" && server ? server : null,
     tab: (TABS as readonly string[]).includes(tab ?? "") ? (tab as Route["tab"]) : "overview",
     owner,
@@ -86,7 +90,7 @@ export function useRoute(): [Route, (r: Partial<Route>) => void] {
   }, []);
   const go = useCallback((next: Partial<Route>) => {
     const r = { ...parse(), ...next };
-    location.hash = r.server ? `/s/${r.server}/${r.tab}${r.owner ? `?owner=${r.owner}` : ""}` : "/";
+    location.hash = r.global ? "/settings" : r.server ? `/s/${r.server}/${r.tab}${r.owner ? `?owner=${r.owner}` : ""}` : "/";
   }, []);
   return [route, go];
 }

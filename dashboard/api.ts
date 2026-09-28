@@ -10,6 +10,8 @@ export type ServerCard = {
 };
 export type Player = Person & { points: number; cards: number };
 export type ServerDetail = ServerCard & {
+  points: Record<string, number>; // this server's value per rarity
+  medals: number[];
   deck: { rarity: string; total: number; claimed: number }[];
   players: Player[];
   allTime: (Person & { points: number; seasons: number; golds: number })[];
@@ -21,7 +23,8 @@ export type SeasonResult = {
 };
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) { super(message); }
+  /** errors: which field was wrong and why, when the server checked a form */
+  constructor(message: string, readonly status: number, readonly errors?: Record<string, string>) { super(message); }
 }
 
 /** Fired when the session runs out, so the app can show the sign-in screen again. */
@@ -37,6 +40,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   if (!res) throw new ApiError("Can't reach the bot. Check your connection and try again.", 0);
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && path !== "/login") signedOut.dispatchEvent(new Event("out"));
-  if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Something went wrong (${res.status}).`, res.status);
+  const d = data as { error?: string; errors?: Record<string, string> };
+  if (!res.ok) throw new ApiError(d.error ?? `Something went wrong (${res.status}).`, res.status, d.errors);
   return data as T;
 }
