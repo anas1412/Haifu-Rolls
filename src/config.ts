@@ -24,7 +24,7 @@ export const RARITY_ORDER = Object.keys(RARITIES) as Rarity[];
  */
 export const SECRET_RARITIES: Rarity[] = ["المنتخب", "كيرك"];
 
-export const ROLLS_PER_RESET = 5;        // rolls each player gets per window
+export const ROLLS_PER_RESET = 8;        // rolls each player gets per window
 export const ROLL_RESET_HOURS = 2;       // rolls refill for everyone together every this many hours (windows start at midnight)
 // One claim at a time: the wait before the next one depends on the card you claimed (claimHours above).
 export const CLAIM_WINDOW_SECONDS = 90;  // how long the claim button stays alive after a roll

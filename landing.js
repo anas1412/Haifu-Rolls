@@ -11,7 +11,7 @@ const TIERS = [
   { key: "أسطورية", weight: 10, points: 10, claimHours: 3, color: "#9b59b6" },
   { key: "الملكة", weight: 4, points: 25, claimHours: 3, color: "#f1c40f" },
 ];
-const RULES = { rolls: 5, rollResetHours: 2, claimWindowSeconds: 90 };
+const RULES = { rolls: 8, rollResetHours: 2, claimWindowSeconds: 90 };
 const SHOWCASE = "h52.jpg"; // الهاربة مالمتحف, the card shown before the first roll
 
 const tierOf = (key) => TIERS.find((t) => t.key === key);

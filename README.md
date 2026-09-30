@@ -51,7 +51,7 @@ already been shown to them.
 
 Rolls only show cards nobody in the server owns yet (`ROLL_ONLY_UNCLAIMED` in `src/config.ts`; set to `False` to roll owned cards too).
 
-Limits: **5 rolls**, refilling for everyone every **2 hours** (windows counted from midnight, local time of the machine running the bot). **1 claim**, then a wait that depends on the card you claimed: **1 hour** for common, green and blue, **3 hours** for legendary and queen, **5 hours** for the secret tiers (`claimHours` in `config.ts`). `/usage` shows what you have left. Defaults live in `src/config.ts`; change them live from the dashboard's settings.
+Limits: **8 rolls**, refilling for everyone every **2 hours** (windows counted from midnight, local time of the machine running the bot). **1 claim**, then a wait that depends on the card you claimed: **1 hour** for common, green and blue, **3 hours** for legendary and queen, **5 hours** for the secret tiers (`claimHours` in `config.ts`). `/usage` shows what you have left. Defaults live in `src/config.ts`; change them live from the dashboard's settings.
 
 ## Run your own copy (optional)
 
