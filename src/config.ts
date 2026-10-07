@@ -34,10 +34,10 @@ export const ROLL_ONLY_UNCLAIMED = true; // true: /roll only shows cards nobody 
 
 // Card Rush: every few hours the bot drops a card in the channel it was last used in.
 // First to press the button keeps it, for free, and it never expires.
-export const RUSH_MIN_HOURS = 2;   // shortest wait between drops
-export const RUSH_MAX_HOURS = 6;   // longest wait between drops
-export const RUSH_MIN_RARITY: Rarity = "مميزة"; // drops are never worse than this
-export const RUSH_MAX_RARITY: Rarity = "نادرة"; // and never better than this
+export const RUSH_MIN_HOURS = 3;   // shortest wait between drops
+export const RUSH_MAX_HOURS = 4;   // longest wait between drops
+export const RUSH_MIN_RARITY: Rarity = "عادية"; // drops are never worse than this
+export const RUSH_MAX_RARITY: Rarity = "مميزة"; // and never better than this
 
 // Duel: stake one of your cards against someone else's. A coin flip decides; winner takes both.
 // Stakes are free on purpose, so a newcomer can win big. The defender has to accept, which is the safeguard.

@@ -42,7 +42,7 @@ Rarity is per card: a tier's share of rolls is its weight times how many of its 
 unclaimed, so rare cards surface more often as the common ones run out. Points mirror rarity
 (`points = 100 / weight`), so a card twice as hard to get is worth twice as much.
 
-**Card Rush:** every 2-6 hours the bot drops a card in the channel it was last used in. It is always مميزة or نادرة,
+**Card Rush:** every 3-4 hours the bot drops a card in the channel it was last used in. It is always عادية or مميزة,
 costs nothing, never expires, and the first person to press the button keeps it. Late joiners catch up here.
 Tune it with `RUSH_MIN_HOURS`, `RUSH_MAX_HOURS`, `RUSH_MIN_RARITY` and `RUSH_MAX_RARITY` in `config.ts`.
 

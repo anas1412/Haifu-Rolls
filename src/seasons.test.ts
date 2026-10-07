@@ -274,14 +274,14 @@ test("rolls refill in shared 2h windows; the claim is a cooldown from your own c
   expect(db.secondsUntilClaim(g, "fresh")).toBe(0);        // someone else's claim does not lock you
 });
 
-test("rush drops are only مميزة or نادرة", async () => {
+test("rush drops are only عادية or مميزة", async () => {
   const { pickCard } = await import("./index");
   const { RUSH_MIN_RARITY, RUSH_MAX_RARITY } = await import("./config");
-  db.addCard("rush-low.jpg", "عادي الدروب", "عادية", "d");   // below the range
+  db.addCard("rush-low.jpg", "نادر الدروب", "نادرة", "d");   // just above the range
   db.addCard("rush-high.jpg", "سر الدروب", "كيرك", "d");      // above it
   const seen = new Set<string>();
   for (let n = 0; n < 500; n++) seen.add(pickCard("rush-guild", RUSH_MIN_RARITY, [], RUSH_MAX_RARITY)!.rarity);
-  expect([...seen].sort()).toEqual(["مميزة", "نادرة"].sort()); // both colours show up, nothing else does
+  expect([...seen].sort()).toEqual(["عادية", "مميزة"].sort()); // both colours show up, nothing else does
 });
 
 test("rarity is per card: a big tier cannot drown out a small one, and value mirrors rarity", async () => {
