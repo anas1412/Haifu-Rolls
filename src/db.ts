@@ -390,6 +390,13 @@ export function transfer(guildId: string, cardId: number, fromUser: string, toUs
   );
 }
 
+/** Give several cards at once. All or nothing: if any card is not `fromUser`'s, none of them move and this throws. */
+export function giftCards(guildId: string, cardIds: number[], fromUser: string, toUser: string): void {
+  db.transaction(() => {
+    for (const id of cardIds) if (!transfer(guildId, id, fromUser, toUser)) throw new Error("ownership changed");
+  })();
+}
+
 /** Atomically trade cardA (owned by userA) for cardB (owned by userB). Throws if ownership changed. */
 export function swap(guildId: string, cardA: number, userA: string, cardB: number, userB: string): void {
   const season = currentSeason(guildId);

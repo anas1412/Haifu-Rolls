@@ -384,3 +384,28 @@ test("resetting a claim timer lets the player claim again and keeps their cards"
   expect(db.resetClaimTimer(g, "waiter")).toBe(false);           // nothing left to reset
   expect(db.resetClaimTimer(g, "never-claimed")).toBe(false);
 });
+
+test("gifting several cards: all move to the recipient, or none do", async () => {
+  const { parseCards, parseStake } = await import("./index");
+  const g = "gift-guild";
+  const ids = [1, 2, 3].map((n) => db.addCard(`gf-${n}.jpg`, `هدية ${n}`, "عادية", "d"));
+  for (const id of ids) db.claim(g, id, "giver");
+  const stranger = db.addCard("gf-4.jpg", "هدية ليست لك", "عادية", "d");
+  db.claim(g, stranger, "someone-else");
+
+  // one card the giver does not own: nothing moves, not even the valid ones
+  expect(() => db.giftCards(g, [ids[0]!, ids[1]!, stranger], "giver", "friend")).toThrow();
+  expect(ids.map((id) => db.ownerOf(g, id))).toEqual(["giver", "giver", "giver"]);
+
+  db.giftCards(g, ids, "giver", "friend");
+  expect(ids.map((id) => db.ownerOf(g, id))).toEqual(["friend", "friend", "friend"]); // all moved
+  expect(db.ownerOf(g, stranger)).toBe("someone-else");                                // and nobody else's card did
+
+  // reading the list: same as a duel side, but gifts are not capped like a wager
+  const many = Array.from({ length: 12 }, (_, n) => String(n + 1)).join(",");
+  expect("cards" in parseCards(many) && parseCards(many)).toBeTruthy();                  // 12 cards read fine for a gift
+  expect(parseStake(g, many)).toEqual({ error: "أقصى 10 كروت في التحدي" });               // while a duel side still stops at 10
+  expect(parseCards("1,#1")).toEqual({ error: "كرت مكرر: " + db.getCard(1)!.name });
+  expect(parseCards("999999")).toEqual({ error: "ما لقيت كرت: 999999" });
+  expect(parseCards("")).toEqual({ error: "ما حددت أي كرت" });
+});

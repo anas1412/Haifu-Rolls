@@ -202,10 +202,10 @@ export function stakeBlock(guildId: string, cards: db.Card[]): string {
 }
 
 /**
- * Resolve "42,43,name" into cards. Rejects unknown cards, repeats, and anything over the cap so the
- * offer embed can never misrepresent what is actually at stake.
+ * Resolve "42,43,name" into cards. Rejects unknown cards and repeats. Shared by /duel and /gift, so
+ * both read a list of cards the same way.
  */
-export function parseStake(guildId: string, input: string): { cards: db.Card[] } | { error: string } {
+export function parseCards(input: string): { cards: db.Card[] } | { error: string } {
   const parts = [...new Set(input.split(",").map((p) => p.trim()).filter(Boolean))];
   if (!parts.length) return { error: "ما حددت أي كرت" };
   const cards: db.Card[] = [];
@@ -215,9 +215,15 @@ export function parseStake(guildId: string, input: string): { cards: db.Card[] }
     if (cards.some((c) => c.id === card.id)) return { error: `كرت مكرر: ${card.name}` };
     cards.push(card);
   }
-  const max = settingsFor(guildId).duelMaxCards;
-  if (cards.length > max) return { error: `أقصى ${max} كروت في التحدي` };
   return { cards };
+}
+
+/** A duel side: the same list, but capped so nobody gambles a whole collection (duelMaxCards). */
+export function parseStake(guildId: string, input: string): { cards: db.Card[] } | { error: string } {
+  const parsed = parseCards(input);
+  if ("error" in parsed) return parsed;
+  const max = settingsFor(guildId).duelMaxCards;
+  return parsed.cards.length > max ? { error: `أقصى ${max} كروت في التحدي` } : parsed;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -447,9 +453,9 @@ const commands = [
     .addStringOption((o) => o.setName("name").setDescription("رقم الكرت أو اسمه").setRequired(true)),
   new SlashCommandBuilder()
     .setName("gift")
-    .setDescription("اهدِ كرت لعضو")
+    .setDescription("اهدِ كرتاً أو عدة كروت لعضو")
     .addUserOption((o) => o.setName("member").setDescription("المستلم").setRequired(true))
-    .addStringOption((o) => o.setName("name").setDescription("رقم الكرت أو اسمه").setRequired(true)),
+    .addStringOption((o) => o.setName("name").setDescription("رقم الكرت أو اسمه، أو عدة كروت بينها فاصلة: 42,43").setRequired(true)),
   new SlashCommandBuilder()
     .setName("exchange")
     .setDescription("اعرض تبادل كرت بكرت مع عضو")
@@ -634,9 +640,26 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
     case "gift": {
       const target = i.options.getUser("member", true);
-      const c = db.findCard(i.options.getString("name", true));
-      if (!c || !db.transfer(gid, c.id, uid, target.id)) return void i.reply({ content: ar("هذا الكرت ليس في مجموعتك"), ...Ephemeral });
-      return void i.reply(note(`🎁 ${i.user} أهدى **${c.name}** إلى ${target}`, COLOR.ok));
+      if (target.id === uid) return void i.reply({ ...note("ما تقدر تهدي نفسك", COLOR.warn), ...Ephemeral });
+      if (target.bot) return void i.reply({ ...note("ما تقدر تهدي بوت", COLOR.warn), ...Ephemeral });
+      const parsed = parseCards(i.options.getString("name", true));
+      if ("error" in parsed) return void i.reply({ ...note(parsed.error, COLOR.warn), ...Ephemeral });
+      const cards = parsed.cards;
+      const notYours = cards.find((c) => db.ownerOf(gid, c.id) !== uid);
+      if (notYours) return void i.reply({ ...note(`ليس في مجموعتك: ${notYours.name} #${notYours.id}`, COLOR.warn), ...Ephemeral });
+      try {
+        db.giftCards(gid, cards.map((c) => c.id), uid, target.id); // all or nothing
+      } catch {
+        return void i.reply({ ...note("تغيّرت الملكية، جرّب مرة ثانية", COLOR.warn), ...Ephemeral });
+      }
+      if (cards.length === 1) return void i.reply(note(`🎁 ${i.user} أهدى **${cards[0]!.name}** إلى ${target}`, COLOR.ok));
+      // A mention never renders in a title, so the names go in the description and a plain name in the title.
+      const gift = new EmbedBuilder()
+        .setTitle(`🎁 هدية من ${callerName(i)}`)
+        .setDescription(`${i.user} أهدى ${target}`)
+        .setColor(COLOR.ok)
+        .addFields({ name: "الكروت", value: stakeBlock(gid, cards) }); // summarised past the list limit, like a duel offer
+      return void i.reply({ embeds: [arEmbed(gift)] });
     }
 
     case "exchange": {

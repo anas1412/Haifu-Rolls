@@ -21,7 +21,7 @@ Any new photo you drop in later gets a random **rarity** (weighted dice) and a n
 | `/top [season]` | This season's standings. Pass a number to see a finished season |
 | `/leaderboard` | All-time table of season medals. Never resets |
 | `/divorce <id or name>` | Release a card you own |
-| `/gift <member> <id or name>` | Give a card away |
+| `/gift <member> <ids or names>` | Give a card away, or several at once, comma-separated: `/gift @someone 42,43,44`. All of them move or none do |
 | `/exchange <member> <my_card> <their_card>` | Propose a trade by id or name. The other member gets Accept / Decline buttons (5 min) |
 | `/duel <member> <my_card> <their_card>` | Stake up to 10 cards against theirs, comma-separated. A draw decides, winner takes all |
 | `/rescan` | (Manage Server) register new photos in `images/` |
