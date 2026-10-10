@@ -218,6 +218,9 @@ button.person:hover .name { text-decoration: underline; text-underline-offset: 3
 .table .r { text-align: right; }
 .table td.place { width: 40px; }
 .table td .progress { width: 160px; }
+.claim-wait { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.claim-wait > span { color: var(--warn); font-variant-numeric: tabular-nums; }
+.table .ok-text { font-size: 0.9rem; }
 
 /* ---------- season ---------- */
 .season-view { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }

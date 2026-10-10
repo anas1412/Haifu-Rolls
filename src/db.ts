@@ -498,6 +498,11 @@ export function awardDuel(guildId: string, cardsA: number[], userA: string, card
   })();
 }
 
+/** Let a player claim again right now. Their claimed cards are untouched. True if they were waiting. */
+export function resetClaimTimer(guildId: string, userId: string): boolean {
+  return db.query("DELETE FROM last_claim WHERE guild_id = ? AND user_id = ?").run(guildId, userId).changes === 1;
+}
+
 /** 0 when the player may claim now, otherwise how long until they can. */
 export function secondsUntilClaim(guildId: string, userId: string): number {
   const row = db

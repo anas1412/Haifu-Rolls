@@ -181,7 +181,7 @@ function ServerView({ id, route, go, meta, onChange }: {
       <div className="tab-body">
         {route.tab === "overview" && <Overview server={server} meta={meta} onPlayer={(u) => go({ tab: "cards", owner: u })} />}
         {route.tab === "cards" && <Cards server={server} meta={meta} owner={route.owner} setOwner={(o) => go({ owner: o })} onChanged={refresh} />}
-        {route.tab === "players" && <Players server={server} onCards={(u) => go({ tab: "cards", owner: u })} />}
+        {route.tab === "players" && <Players server={server} onCards={(u) => go({ tab: "cards", owner: u })} onChanged={refresh} />}
         {route.tab === "season" && <Season server={server} meta={meta} onEnded={refresh} />}
         {route.tab === "settings" && <SettingsForm scope={server.id} serverName={server.name} />}
       </div>

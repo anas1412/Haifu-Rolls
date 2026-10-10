@@ -33,6 +33,11 @@ for (const s of servers) {
   }
 }
 
+// a few players are mid-wait, so the Players tab has something to reset
+for (const s of servers) {
+  db.cardsWithOwners(s.id, { owner: "none", limit: 3 }).cards.forEach((c, i) => db.claim(s.id, c.id, String(100000000000000000n + BigInt(i))));
+}
+
 const nameOf = (id: string) => NAMES[Number(BigInt(id) - 100000000000000000n) % NAMES.length] ?? id;
 // every other player gets a picture, so both the photo and the letter fallback show up
 const avatarOf = (id: string) => (Number(BigInt(id) % 2n) ? null : `/images/h${String((Number(BigInt(id) % 40n)) + 10)}.jpg`);

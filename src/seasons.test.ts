@@ -373,3 +373,14 @@ test("the game uses the server's own settings: points, claim wait and medals", a
   expect(db.closeSeason(g)).toEqual([{ userId: "setter", place: 1, points: 9 }]); // this server's medals
   expect(saveOverrides(g, {}).ok).toBe(true);
 });
+
+test("resetting a claim timer lets the player claim again and keeps their cards", () => {
+  const g = "reset-timer-guild", card = db.addCard("rt-1.jpg", "كرت إعادة الطلب", "الملكة", "d");
+  db.claim(g, card, "waiter");                                   // a queen: a long wait
+  expect(db.secondsUntilClaim(g, "waiter")).toBeGreaterThan(3600);
+  expect(db.resetClaimTimer(g, "waiter")).toBe(true);
+  expect(db.secondsUntilClaim(g, "waiter")).toBe(0);             // can claim right now
+  expect(db.ownerOf(g, card)).toBe("waiter");                    // the card is still theirs
+  expect(db.resetClaimTimer(g, "waiter")).toBe(false);           // nothing left to reset
+  expect(db.resetClaimTimer(g, "never-claimed")).toBe(false);
+});

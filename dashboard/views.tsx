@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Card, type Meta, type Person, type SeasonResult, type ServerDetail } from "./api";
+import { api, type Card, type Meta, type Person, type Player, type SeasonResult, type ServerDetail } from "./api";
 import { useDebounced, useToast } from "./hooks";
-import { Avatar, Empty, Modal, Name, Progress, RarityTag, plural } from "./ui";
+import { Avatar, Empty, Modal, Name, Progress, RarityTag, plural, since } from "./ui";
 
 const PAGE = 48;
 
@@ -293,8 +293,23 @@ function MemberPicker({ server, busy, onPick, onCancel }: { server: ServerDetail
 
 // ---------- players ----------
 
-export function Players({ server, onCards }: { server: ServerDetail; onCards: (userId: string) => void }) {
+export function Players({ server, onCards, onChanged }: { server: ServerDetail; onCards: (userId: string) => void; onChanged: () => void }) {
   const [q, setQ] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const toast = useToast();
+
+  async function resetClaim(p: Player) {
+    setBusy(p.userId);
+    try {
+      await api(`/servers/${server.id}/players/${p.userId}/reset-claim`, { method: "POST" });
+      toast(`${p.name} can claim again right now. Their cards are unchanged.`);
+      onChanged();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(null);
+    }
+  }
   const top = server.players[0]?.points || 1;
   const shown = server.players.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
   if (!server.players.length) return <Empty title="No players yet">Players appear here once they claim their first card this season.</Empty>;
@@ -305,7 +320,7 @@ export function Players({ server, onCards }: { server: ServerDetail; onCards: (u
       </div>
       <div className="table-wrap">
         <table className="table">
-          <thead><tr><th>#</th><th>Player</th><th className="r">Cards</th><th className="r">Points</th><th className="hide-sm">Share of the leader</th><th /></tr></thead>
+          <thead><tr><th>#</th><th>Player</th><th className="r">Cards</th><th className="r">Points</th><th>Claim</th><th className="hide-sm">Share of the leader</th><th /></tr></thead>
           <tbody>
             {shown.map((p) => (
               <tr key={p.userId}>
@@ -313,6 +328,11 @@ export function Players({ server, onCards }: { server: ServerDetail; onCards: (u
                 <td><span className="person static"><Avatar person={p} /><Name>{p.name}</Name></span></td>
                 <td className="r num">{p.cards}</td>
                 <td className="r num">{p.points.toLocaleString()}</td>
+                <td>
+                  {p.claimWait > 0
+                    ? <span className="claim-wait"><span>{since(p.claimWait * 1000)}</span><button className="btn small" onClick={() => resetClaim(p)} disabled={busy === p.userId}>{busy === p.userId ? "Resetting…" : "Reset claim"}</button></span>
+                    : <span className="ok-text">Ready</span>}
+                </td>
                 <td className="hide-sm"><Progress value={p.points} total={top} /></td>
                 <td className="r"><button className="btn small ghost" onClick={() => onCards(p.userId)}>See cards</button></td>
               </tr>

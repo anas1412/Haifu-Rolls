@@ -8,7 +8,7 @@ export type ServerCard = {
   id: string; name: string; icon: string | null; members: number | null; present: boolean;
   season: number; players: number; claimed: number; total: number;
 };
-export type Player = Person & { points: number; cards: number };
+export type Player = Person & { points: number; cards: number; claimWait: number }; // claimWait: seconds until they can claim again, 0 when ready
 export type ServerDetail = ServerCard & {
   points: Record<string, number>; // this server's value per rarity
   medals: number[];

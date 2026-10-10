@@ -114,7 +114,7 @@ async function serverDetail(client: Client, id: string) {
     points: Object.fromEntries(RARITY_ORDER.map((r) => [r, s.tiers[r].points])), // this server's values
     medals: s.medalPoints,
     deck: RARITY_ORDER.map((rarity) => ({ rarity, ...(deck.find((d) => d.rarity === rarity) ?? { total: 0, claimed: 0 }) })),
-    players: await Promise.all(standings.map(async (s) => ({ ...(await person(client, id, s.userId)), points: s.points, cards: s.count }))),
+    players: await Promise.all(standings.map(async (s) => ({ ...(await person(client, id, s.userId)), points: s.points, cards: s.count, claimWait: Math.round(db.secondsUntilClaim(id, s.userId)) }))),
     allTime: await Promise.all(allTime.map(async (a) => ({ ...(await person(client, id, a.userId)), ...a }))),
   };
 }
@@ -215,6 +215,13 @@ export async function adminApi(req: Request, client: Client, endSeason: EndSeaso
     // No search available: offer this season's players whose name matches.
     const players = await Promise.all(db.seasonTop(guildId, db.currentSeason(guildId), 500).map((s) => person(client, guildId, s.userId)));
     return json(players.filter((p) => p.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8));
+  }
+
+  const reset = rest.match(/^\/players\/(\d{15,25})\/reset-claim$/);
+  if (reset && req.method === "POST") {
+    // Deletes only the waiting time. The player's claimed cards stay theirs.
+    const had = db.resetClaimTimer(guildId, reset[1]!);
+    return json({ ok: true, wasWaiting: had, player: await person(client, guildId, reset[1]!) });
   }
 
   const owner = rest.match(/^\/cards\/(\d+)\/owner$/);
